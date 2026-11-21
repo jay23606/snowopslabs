@@ -70,6 +70,10 @@ with the file, line and the values it accepts. `labctl scenario list`,
 the matching `/api/v2` list routes take `?track=` and `?level=`. Shipped
 content states all three fields rather than leaning on the defaults.
 
+Messages show the names a learner knows: Kubernetes, CI/CD and IaC; Beginner,
+Intermediate and Advanced. The ids above stay in YAML, flags and JSON. A filter
+also accepts `k8s` for `kubernetes`; content files do not.
+
 `prerequisites.platform` lists everything the scenario's own parts need, so
 `scenario up --deploy-prereqs` works on a bare cluster: `ingress` for a
 `promql` or `http` check (both read through the ingress), `monitoring/metrics`

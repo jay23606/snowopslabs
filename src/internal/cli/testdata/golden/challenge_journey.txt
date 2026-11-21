@@ -7,6 +7,8 @@ $ labctl challenge info demo-challenge
 Name:        demo-challenge
 Display:     Demo challenge
 Category:    workload
+Track:       Kubernetes
+Level:       Intermediate
 Par time:    10m
 Hint cost:   5% per hint
 Setup:       incident demo-fault

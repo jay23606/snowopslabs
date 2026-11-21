@@ -548,6 +548,7 @@ var scenarioInfoCmd = &cobra.Command{
 		fmt.Printf("Name:        %s\n", s.Name)
 		fmt.Printf("Display:     %s\n", s.DisplayName)
 		fmt.Printf("Category:    %s\n", s.Category)
+		printMeta(os.Stdout, s.Meta)
 		fmt.Printf("Description: %s\n", resolve(s.Description))
 
 		status := "inactive"

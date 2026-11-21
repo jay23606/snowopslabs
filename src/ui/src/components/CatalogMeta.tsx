@@ -1,6 +1,6 @@
 import { Badge } from './Badge'
 import {
-  LEVELS, TRACKS, describeFilters, levelOf, minutesLabel, trackLabel, trackOf,
+  LEVELS, TRACKS, emptyMessage, levelLabel, levelOf, minutesLabel, trackLabel, trackOf,
   type CatalogFilter,
 } from '../lib/catalog'
 import type { CatalogMeta as Meta } from '../types'
@@ -11,7 +11,7 @@ export function MetaBadges({ item }: { item: Meta }) {
   return (
     <>
       <Badge variant="runtime">{trackLabel(trackOf(item))}</Badge>
-      <Badge variant="category">{levelOf(item)}</Badge>
+      <Badge variant="category">{levelLabel(levelOf(item))}</Badge>
       {minutes && <span className="hint-text">{minutes}</span>}
     </>
   )
@@ -29,7 +29,7 @@ interface NoMatchesProps {
 export function NoMatches({ noun, search, filter, onClear }: NoMatchesProps) {
   return (
     <>
-      <div>No {noun} match {describeFilters(search, filter)}.</div>
+      <div>{emptyMessage(noun, search, filter)}</div>
       <div className="empty-hint">
         <button className="btn btn-sm" onClick={onClear}>Clear filters</button>
       </div>
@@ -62,7 +62,7 @@ export function CatalogFilters({ value, onChange }: CatalogFiltersProps) {
         onChange={e => onChange({ ...value, level: e.target.value })}
       >
         <option value="">All levels</option>
-        {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
+        {LEVELS.map(l => <option key={l} value={l}>{levelLabel(l)}</option>)}
       </select>
     </>
   )

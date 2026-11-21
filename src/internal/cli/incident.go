@@ -438,6 +438,7 @@ var incidentInfoCmd = &cobra.Command{
 		fmt.Printf("Name:        %s\n", f.Name)
 		fmt.Printf("Display:     %s\n", f.DisplayName)
 		fmt.Printf("Category:    %s\n", f.Category)
+		printMeta(os.Stdout, f.Meta)
 		fmt.Printf("Severity:    %s\n", f.Severity)
 		// Print the target with templates expanded.
 		rt := incEng.ResolvedTarget(f)

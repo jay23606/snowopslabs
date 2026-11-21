@@ -4,6 +4,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -27,16 +28,28 @@ func (c *catalogFlags) filter() (schema.Filter, error) {
 	return schema.ParseFilter(c.track, c.level)
 }
 
-// noMatch is the line printed when a filter leaves nothing to list.
+// noMatch is the line printed when a filter leaves nothing to list. It names
+// the track and level as a learner knows them.
 func noMatch(noun string, f schema.Filter) string {
-	var parts []string
+	var where []string
 	if f.Track != "" {
-		parts = append(parts, "track "+f.Track)
+		where = append(where, "on the "+schema.TrackLabel(f.Track)+" track")
 	}
 	if f.Level != "" {
-		parts = append(parts, "level "+f.Level)
+		where = append(where, "at "+schema.LevelLabel(f.Level)+" level")
 	}
-	return fmt.Sprintf("No %s match %s. Drop a filter to see more.", noun, strings.Join(parts, " and "))
+	return fmt.Sprintf("No %s %s yet. Drop a filter to see more.", noun, strings.Join(where, " "))
+}
+
+// printMeta writes the Track, Level and Time lines of an info command. Time is
+// left out when the item states no minutes.
+func printMeta(w io.Writer, m schema.Meta) {
+	m.ApplyDefaults()
+	fmt.Fprintf(w, "Track:       %s\n", schema.TrackLabel(m.Track))
+	fmt.Fprintf(w, "Level:       %s\n", schema.LevelLabel(m.Level))
+	if m.Minutes > 0 {
+		fmt.Fprintf(w, "Time:        ~%d min\n", m.Minutes)
+	}
 }
 
 // minutesCell renders a duration column: the minutes, or "-" when unstated.

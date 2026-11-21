@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest'
 import {
-  LEVELS, NO_FILTER, TRACKS, describeFilters, levelOf, matchesMeta, metaFilterActive,
+  LEVELS, NO_FILTER, TRACKS, emptyMessage, levelLabel, levelOf, matchesMeta, metaFilterActive,
   minutesLabel, trackLabel, trackOf,
 } from './catalog'
 
@@ -52,12 +52,24 @@ describe('trackLabel', () => {
   })
 })
 
-describe('describeFilters', () => {
-  it('joins the search text, track and level', () => {
-    expect(describeFilters('', { track: '', level: '' })).toBe('')
-    expect(describeFilters('mesh', NO_FILTER)).toBe('“mesh”')
-    expect(describeFilters('', { track: 'cicd', level: 'beginner' })).toBe('track cicd and level beginner')
-    expect(describeFilters('x', { track: 'iac', level: '' })).toBe('“x” and track iac')
+describe('labels', () => {
+  it('name tracks and levels as a learner reads them', () => {
+    expect(trackLabel('iac')).toBe('IaC')
+    expect(levelLabel('beginner')).toBe('Beginner')
+    expect(levelLabel('advanced')).toBe('Advanced')
+    expect(levelLabel('odd')).toBe('odd')
+    for (const t of TRACKS) expect(trackLabel(t)).not.toBe(t)
+    for (const l of LEVELS) expect(levelLabel(l)).not.toBe(l)
+  })
+})
+
+describe('emptyMessage', () => {
+  it('uses labels, never ids', () => {
+    expect(emptyMessage('scenarios', 'mesh', NO_FILTER)).toBe('No scenarios match “mesh”.')
+    expect(emptyMessage('scenarios', '', { track: 'cicd', level: 'advanced' }))
+      .toBe('No scenarios on the CI/CD track at Advanced level yet.')
+    expect(emptyMessage('faults', '', { track: '', level: 'beginner' })).toBe('No faults at Beginner level yet.')
+    expect(emptyMessage('scenarios', 'x', { track: 'iac', level: '' })).toBe('No scenarios match “x” on the IaC track.')
   })
 })
 
