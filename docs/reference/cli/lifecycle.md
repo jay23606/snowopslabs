@@ -9,7 +9,7 @@ Building the lab, checking the machine, and reading back what labctl did.
 | `labctl init` | Install tools, start Docker at the lab's size, check Docker's resources, create the cluster, install the platform, then check the cluster is healthy. A lab still on the old `*.k3d.local` or `*.kind.local` hostnames moves to `*.localhost` in place. Safe to re-run: it is also how the lab comes back after a reboot. |
 | `labctl teardown` | Deactivate scenarios and incidents, destroy apps, remove the platform, delete the cluster. |
 | `labctl reset` | `teardown` followed by `init`. |
-| `labctl status` | Cluster info, platform health and deployed apps in one view. When the cluster is configured but not answering it says so, with the reason, instead of listing everything as not installed. On a k3d lab it also reports an inotify limit a Docker VM restart reset and nodes `NotReady` while their container is up, with the commands that recover them; it changes nothing itself. |
+| `labctl status` | Cluster info, platform health and deployed apps in one view. It names the cluster context the lab targets and says when your current kubectl context is another one; labctl itself always uses the lab's own kubeconfig. When the cluster is configured but not answering it says so, with the reason, instead of listing everything as not installed. On a k3d lab it also reports an inotify limit a Docker VM restart reset and nodes `NotReady` while their container is up, with the commands that recover them; it changes nothing itself. |
 
 ### What `init` checks
 
@@ -67,6 +67,10 @@ of Docker's memory, and names the command that stops a scenario. On k3d, a
 note says when `fs.inotify.max_user_instances` is back below 512 after a Docker
 VM restart; the next lab, platform, scenario, incident or traffic command
 raises it.
+
+`doctor` also prints a `Target:` line naming the cluster context the lab runs
+against, with a note when your current kubectl context is another one. labctl
+runs only against the lab, so the note explains plain `kubectl`, not labctl.
 
 On WSL2, `doctor` adds a dedicated **WSL notes** section. It checks whether the
 lab directory is on a Windows mount (any path under `/mnt/`) where 9p bridge

@@ -30,6 +30,8 @@ done
 
 # shellcheck source=../_lib/docker.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/docker.sh"
+# shellcheck source=../_lib/kubeconfig.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/kubeconfig.sh"
 
 ensure_docker_running || exit 1
 
@@ -40,13 +42,23 @@ ensure_docker_running || exit 1
 # is reachable, and recreate a broken cluster rather than failing every later
 # step (mirrors runtimes/k3d/up.sh).
 REACHABLE_WAIT="${REACHABLE_WAIT:-180}"
+
+# refresh_kubeconfigs rewrites the lab's own kubeconfig from kind and points
+# every later kubectl call in this script at it. The context is also exported
+# into the user's kubeconfig, so plain kubectl keeps working.
+refresh_kubeconfigs() {
+  use_lab_kubeconfig "$CLUSTER_NAME"
+  with_user_kubeconfig kind export kubeconfig --name "$CLUSTER_NAME" >/dev/null 2>&1 || true
+  write_lab_kubeconfig "$CLUSTER_NAME" kind get kubeconfig --name "$CLUSTER_NAME"
+}
+
 kind_reachable() {
   kubectl config use-context "kind-$CLUSTER_NAME" >/dev/null 2>&1 &&
     kubectl --request-timeout=20s get --raw=/healthz >/dev/null 2>&1
 }
 if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
   echo "Cluster '$CLUSTER_NAME' already exists - checking it is healthy."
-  kind export kubeconfig --name "$CLUSTER_NAME" >/dev/null 2>&1 || true
+  refresh_kubeconfigs || true
   # A stopped Docker VM stops the node containers; start them again.
   for node in $(docker ps -a --filter "label=io.x-k8s.kind.cluster=${CLUSTER_NAME}" --format '{{.Names}}' 2>/dev/null); do
     docker start "$node" >/dev/null 2>&1 || true
@@ -124,8 +136,11 @@ trap 'rm -f "$config_file"' EXIT
 } >"$config_file"
 
 echo "Creating kind cluster '$CLUSTER_NAME' (control-plane + ${AGENTS} worker(s))..."
-kind create cluster --name "$CLUSTER_NAME" --config "$config_file" --wait 120s
+# kind adds the context to the user's kubeconfig and switches to it, so the
+# create runs against that file; the lab's own kubeconfig is written after.
+with_user_kubeconfig kind create cluster --name "$CLUSTER_NAME" --config "$config_file" --wait 120s
 
+refresh_kubeconfigs || exit 1
 kubectl config use-context "kind-$CLUSTER_NAME"
 record_ingress_ports "$CLUSTER_NAME" "${CLUSTER_NAME}-control-plane"
 

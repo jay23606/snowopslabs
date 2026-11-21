@@ -89,6 +89,11 @@ func runDoctor(ctx context.Context, out io.Writer, runner toolchain.Runner) erro
 			notes = append(notes, note)
 		}
 	}
+	if labErr == nil {
+		if labCfg, err := config.Load(lab); err == nil {
+			printTarget(ctx, out, runner, labCfg)
+		}
+	}
 	suffix, local := labDomain(lab, labErr)
 	if !local && !hostsBlockPresent() {
 		notes = append(notes, "Ingress hostnames (e.g. http://grafana."+suffix+") won't resolve until you\n"+

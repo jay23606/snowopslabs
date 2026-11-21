@@ -27,6 +27,7 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/runtime"
 	"github.com/snowops-oss/snowopslabs/internal/scenario"
 	"github.com/snowops-oss/snowopslabs/internal/services"
+	"github.com/snowops-oss/snowopslabs/internal/toolchain"
 	"github.com/snowops-oss/snowopslabs/internal/workload"
 )
 
@@ -87,6 +88,14 @@ var rootCmd = &cobra.Command{
 			fmt.Fprintf(cmd.ErrOrStderr(), "Moved the lab state from %s to %s.\n",
 				display.Text(legacyState, cfg.ProjectRoot, cfg.StateDir, cliCurrentDir()),
 				display.Text(cfg.StateDir, cfg.ProjectRoot, cfg.StateDir, cliCurrentDir()))
+		}
+
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		if err := useLabCluster(ctx, cmd, toolchain.NewExec(), cfg); err != nil {
+			return err
 		}
 
 		scriptExec = executor.New(cfg.ProjectRoot)

@@ -1,5 +1,6 @@
 $ labctl status
 === Cluster ===
+  Target:   k8s (k3d), context k3d-clitest
   Status:   UNREACHABLE (The connection to the server 127.0.0.1:<port> was refused - did you specify the right host or port?)
   Context:  k3d-clitest
   Profile:  k3d

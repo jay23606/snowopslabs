@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/snowops-oss/snowopslabs/internal/target"
 	"github.com/snowops-oss/snowopslabs/internal/workload"
 )
 
@@ -23,6 +24,13 @@ type Config struct {
 
 	// StateDir holds the lab state of this cluster; see StateDir.
 	StateDir string
+	// Kubeconfig is the lab's own kubeconfig in StateDir, which every run
+	// uses instead of the user's current kubectl context. Empty for the
+	// incluster profile, which uses the pod's ServiceAccount.
+	Kubeconfig string
+	// KubeContext is the context in the user's kubeconfig the lab's cluster
+	// was created under; the lab's own kubeconfig is cut from it when missing.
+	KubeContext string
 
 	// Cluster/Runtime
 	Profile     string
@@ -138,6 +146,10 @@ func Load(projectRoot string) (*Config, error) {
 		return nil, fmt.Errorf("locating the lab state directory: %w", err)
 	}
 	cfg.StateDir = stateDir
+	if profile != target.ProviderIncluster {
+		cfg.Kubeconfig = filepath.Join(stateDir, target.KubeconfigFile)
+	}
+	cfg.KubeContext = target.ExpectedContext(profile, cfg.ClusterName, resolveEnv(fileVals, "KUBECONFIG_CONTEXT", ""))
 
 	// The runtime records how this machine reaches the cluster's ingress: the
 	// ports it bound, which differ from the configured ones when those are
@@ -194,6 +206,11 @@ func Load(projectRoot string) (*Config, error) {
 	cfg.ScriptEnv = make(map[string]string, len(fileVals))
 	for k := range fileVals {
 		cfg.ScriptEnv[k] = resolveEnv(fileVals, k, fileVals[k])
+	}
+	// Every child process reaches the lab's cluster through its own kubeconfig.
+	if cfg.Kubeconfig != "" {
+		cfg.ScriptEnv["KUBECONFIG"] = cfg.Kubeconfig
+		cfg.ScriptEnv["SNOWOPS_LAB_KUBECONFIG"] = cfg.Kubeconfig
 	}
 
 	return cfg, nil

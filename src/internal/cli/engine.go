@@ -81,6 +81,13 @@ func scriptEnv() map[string]string {
 		"WORKLOAD_PORT":      scenes.Workload.Port,
 		"WORKLOAD_METRIC":    scenes.Workload.Metric,
 	}
+	env["LAB_STATE_DIR"] = cfg.StateDir
+	// Every run reaches the lab's cluster through its own kubeconfig, never
+	// through the user's current kubectl context.
+	if cfg.Kubeconfig != "" {
+		env["KUBECONFIG"] = cfg.Kubeconfig
+		env["SNOWOPS_LAB_KUBECONFIG"] = cfg.Kubeconfig
+	}
 	if verbose {
 		env["LABCTL_VERBOSE"] = "1"
 	}

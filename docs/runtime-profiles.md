@@ -23,7 +23,7 @@ Each profile is a directory `runtimes/<name>/` containing exactly:
 
 | File | Required | Contract |
 |---|---|---|
-| `up.sh` | yes | Provision the cluster. **Idempotent**: if the cluster already exists, skip creation and exit 0. Must select the kube-context on success. |
+| `up.sh` | yes | Provision the cluster. **Idempotent**: if the cluster already exists, skip creation and exit 0. Must write the lab's own kubeconfig to `$SNOWOPS_LAB_KUBECONFIG` ([below](#the-labs-own-kubeconfig)). |
 | `down.sh` | yes | Tear the cluster down. **Idempotent no-op** when the cluster is already absent (exit 0, delete nothing). |
 | `runtime.env` | yes | Profile-specific defaults, `KEY=value` lines, read by `labctl` and the platform scripts. |
 | `add-agents.sh` | no | Grow the running cluster to `<total>` agent nodes, ready to run the lab's app images. labctl calls it when a scenario's `requirements.agents` exceeds the cluster's agents. Only k3d has one; without it such a scenario asks for `AGENTS=<n>` and `labctl reset`. |
@@ -31,7 +31,8 @@ Each profile is a directory `runtimes/<name>/` containing exactly:
 | `move-ingress.sh` | no | Add free host ports to the running cluster's ingress and record them in `~/.snowops/clusters/<name>.env`. `labctl init` calls it when the lab's Grafana does not answer through the recorded port from this machine. Only k3d has one (`k3d cluster edit --port-add`); kind cannot add ports to a running cluster. |
 
 Scripts every local profile shares live in `runtimes/_lib/`: `docker.sh` (sourced
-helpers for the Docker engine and the cluster record) and `move-domain.sh`
+helpers for the Docker engine and the cluster record), `kubeconfig.sh` (the
+lab's own kubeconfig) and `move-domain.sh`
 (`<cluster> <old> <new>`: rewrite the lab's hostnames to a new suffix in place,
 which `labctl init` runs for a lab on a legacy default suffix).
 
@@ -70,6 +71,31 @@ the project root and receive configuration through the environment (golden rule
   rewrites the hosts of every Ingress, Traefik IngressRoute and cert-manager
   Certificate, then the record. A `DOMAIN_SUFFIX` set in the environment or
   `.env` is never moved.
+
+### The lab's own kubeconfig
+
+No labctl run follows the kubectl context you have selected. A local profile
+writes a kubeconfig for the lab to `<state dir>/kubeconfig`
+(`~/.snowops/state/<cluster>/kubeconfig`, mode 0600), with exactly one context,
+and labctl sets `KUBECONFIG` to that file for every run: scripts through the run
+engine, the web UI's actions, check scripts and labctl's own kubectl calls.
+Scripts need no `--context` and do not change.
+
+- `up.sh` writes the file from the runtime (`k3d kubeconfig get`,
+  `kind get kubeconfig`) and uses it for every kubectl call it makes.
+  labctl passes the path as `SNOWOPS_LAB_KUBECONFIG`. `incluster` has no file:
+  it uses the ServiceAccount, or the `KUBECONFIG` you set, unchanged.
+- `up.sh` still merges the context into your own kubeconfig, so plain `kubectl`
+  keeps working. labctl keeps your `KUBECONFIG` in `SNOWOPS_USER_KUBECONFIG`
+  for that merge, and `down.sh` removes the context from it.
+- A lab created before the file existed gets it on the first labctl command,
+  cut from the context labctl expects: `k3d-<cluster>`, `kind-<cluster>`, or
+  `KUBECONFIG_CONTEXT` for another profile. If your kubeconfig has no such
+  context, labctl says to run `labctl init`.
+- `labctl status` and `labctl doctor` name the context the lab targets and
+  say when your current kubectl context is another one. Nothing changes your
+  current context for you.
+- `down.sh` removes the file with the cluster.
 
 ### runtime.env keys
 

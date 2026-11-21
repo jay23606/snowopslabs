@@ -11,8 +11,12 @@ CLUSTER_NAME="${1:-${CLUSTER_NAME:-snowops}}"
 
 # shellcheck source=../_lib/docker.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/docker.sh"
-# The cluster's recorded ports go with it, whether or not it still exists.
+# shellcheck source=../_lib/kubeconfig.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/kubeconfig.sh"
+# The cluster's recorded ports and its kubeconfig go with it, whether or not it
+# still exists.
 forget_cluster "$CLUSTER_NAME"
+forget_lab_kubeconfig "$CLUSTER_NAME"
 
 echo -e "${YELLOW}Shutting down k3d cluster '${CLUSTER_NAME}'...${NC}"
 
@@ -29,7 +33,7 @@ if ! k3d cluster list "$CLUSTER_NAME" &>/dev/null && [ -z "$(cluster_containers)
   exit 0
 fi
 
-k3d cluster delete "$CLUSTER_NAME" ||
+with_user_kubeconfig k3d cluster delete "$CLUSTER_NAME" ||
   echo -e "${YELLOW}k3d could not delete '$CLUSTER_NAME' cleanly; removing its containers directly.${NC}"
 
 leftover="$(cluster_containers)"

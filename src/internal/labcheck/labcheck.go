@@ -51,7 +51,7 @@ func AlertmanagerURL(cfg *config.Config) string {
 
 // ScriptEnv is the environment check scripts run with.
 func ScriptEnv(cfg *config.Config, w workload.Workload) []string {
-	return []string{
+	env := []string{
 		"DOMAIN_SUFFIX=" + cfg.DomainSuffix,
 		"INGRESS_URL_SUFFIX=" + cfg.IngressURLSuffix(),
 		"HTTP_PORT=" + cfg.HTTPPort,
@@ -68,6 +68,12 @@ func ScriptEnv(cfg *config.Config, w workload.Workload) []string {
 		"WORKLOAD_PORT=" + w.Port,
 		"WORKLOAD_METRIC=" + w.Metric,
 	}
+	// Check scripts and kubectl checks read the lab's cluster, never the
+	// user's current kubectl context.
+	if cfg.Kubeconfig != "" {
+		env = append(env, "KUBECONFIG="+cfg.Kubeconfig)
+	}
+	return env
 }
 
 // HTTPClient returns a client for lab URLs. On a local runtime every host

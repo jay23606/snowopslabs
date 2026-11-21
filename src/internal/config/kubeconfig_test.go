@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+// The lab's kubeconfig lives in its state directory and reaches every child
+// process through ScriptEnv; the context it is cut from follows the profile.
+func TestLoad_LabKubeconfig(t *testing.T) {
+	tests := []struct {
+		name           string
+		dotEnv         string
+		wantContext    string
+		wantKubeconfig bool
+	}{
+		{name: "k3d", dotEnv: "CLUSTER_NAME=lab1\n", wantContext: "k3d-lab1", wantKubeconfig: true},
+		{name: "kind", dotEnv: "PROFILE=kind\nCLUSTER_NAME=lab2\n", wantContext: "kind-lab2", wantKubeconfig: true},
+		{name: "an explicit context for another profile", dotEnv: "PROFILE=cloud\nKUBECONFIG_CONTEXT=my-ctx\n", wantContext: "my-ctx", wantKubeconfig: true},
+		{name: "a profile with no context", dotEnv: "PROFILE=cloud\n", wantContext: "", wantKubeconfig: true},
+		{name: "incluster keeps its ServiceAccount", dotEnv: "PROFILE=incluster\n", wantContext: "", wantKubeconfig: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearConfigEnv(t)
+			root := t.TempDir()
+			for _, p := range []string{"k3d", "kind", "cloud", "incluster"} {
+				if err := os.MkdirAll(filepath.Join(root, "runtimes", p), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(root, ".env"), []byte(tt.dotEnv), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(root)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.KubeContext != tt.wantContext {
+				t.Errorf("KubeContext = %q, want %q", cfg.KubeContext, tt.wantContext)
+			}
+			want := ""
+			if tt.wantKubeconfig {
+				want = filepath.Join(cfg.StateDir, "kubeconfig")
+			}
+			if cfg.Kubeconfig != want {
+				t.Errorf("Kubeconfig = %q, want %q", cfg.Kubeconfig, want)
+			}
+			for _, key := range []string{"KUBECONFIG", "SNOWOPS_LAB_KUBECONFIG"} {
+				if got := cfg.ScriptEnv[key]; got != want {
+					t.Errorf("ScriptEnv[%s] = %q, want %q", key, got, want)
+				}
+			}
+		})
+	}
+}
+
+// The user's own KUBECONFIG never replaces the lab's in what children see.
+func TestLoad_LabKubeconfigBeatsTheUsersKubeconfig(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("KUBECONFIG", "/home/me/.kube/other")
+	root := makeLab(t)
+	if err := os.MkdirAll(filepath.Join(root, "runtimes", "k3d"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, want := cfg.ScriptEnv["KUBECONFIG"], filepath.Join(cfg.StateDir, "kubeconfig"); got != want {
+		t.Errorf("ScriptEnv[KUBECONFIG] = %q, want the lab's %q", got, want)
+	}
+}

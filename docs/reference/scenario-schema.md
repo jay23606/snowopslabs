@@ -489,6 +489,11 @@ script, check script and fault script run by the engine is given:
 | `WORKLOAD_METRIC` | `http_server_request_duration_seconds` |
 | `PROJECT_ROOT` | `/home/me/snowopslabs` (the clone) |
 | `LAB_STATE_DIR` | `/home/me/.snowops/state/snowops` |
+| `KUBECONFIG` | `/home/me/.snowops/state/snowops/kubeconfig` (the lab's own, one context) |
+
+`KUBECONFIG` is the lab's kubeconfig, so `kubectl` and `helm` in a script reach
+the lab whichever context the user has selected, and a script never passes
+`--context`. It is not set on the `incluster` profile.
 
 Check scripts also get the lab's ingress: `DOMAIN_SUFFIX`, `INGRESS_URL_SUFFIX`,
 `HTTP_PORT`, `HTTPS_PORT`, and `PROMETHEUS_URL`, `GRAFANA_URL` and

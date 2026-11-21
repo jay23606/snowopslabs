@@ -262,6 +262,19 @@ All external binaries go through `internal/toolchain`. Each adapter:
 
 `labctl doctor` runs every preflight at once and prints a fix for each failure.
 
+### 5.1 Which cluster a run targets
+
+A run never uses the user's current kubectl context. The runtime writes a
+kubeconfig for the lab to `<state dir>/kubeconfig`, and `internal/cli` points the
+process's `KUBECONFIG` at it before any command runs. Every child process
+inherits it: the run engine, the web UI's executor, check scripts, and the
+kubectl calls in `internal/k8s`. `internal/config` carries the same path in
+`Config.Kubeconfig` and `ScriptEnv`, and the run engine's script environment and
+the check environment (`internal/labcheck`) name it explicitly. A lab that
+predates the file gets it on first use, cut from the context labctl expects
+(`internal/target`). The `incluster` profile has no file and keeps its
+ServiceAccount. See [runtime profiles](../runtime-profiles.md#the-labs-own-kubeconfig).
+
 ## 6. Content model
 
 All content is YAML, loaded and validated by `internal/catalog` at startup:
