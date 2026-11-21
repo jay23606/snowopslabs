@@ -21,6 +21,7 @@ import (
 	scnsvc "github.com/snowops-oss/snowopslabs/internal/service/scenario"
 	"github.com/snowops-oss/snowopslabs/internal/workload"
 	"github.com/snowops-oss/snowopslabs/pkg/checks"
+	schema "github.com/snowops-oss/snowopslabs/pkg/scenario"
 	"github.com/spf13/cobra"
 )
 
@@ -57,21 +58,27 @@ var scenarioCmd = &cobra.Command{
 
 func scenarioListCmd() *cobra.Command {
 	var output string
+	var cf catalogFlags
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List available scenarios",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runScenarioList(cmd.OutOrStdout(), cmd.ErrOrStderr(), output)
+			f, err := cf.filter()
+			if err != nil {
+				return err
+			}
+			return runScenarioList(cmd.OutOrStdout(), cmd.ErrOrStderr(), output, f)
 		},
 	}
 	addOutputFlag(cmd, &output, outputTable, outputJSON)
+	cf.add(cmd)
 	return cmd
 }
 
 // runScenarioList prints the scenario catalog as a table, or with -o json as
 // the array GET /api/v2/scenarios serves. Load warnings go to errW, so the
 // JSON on out stays parseable.
-func runScenarioList(out, errW io.Writer, output string) error {
+func runScenarioList(out, errW io.Writer, output string, f schema.Filter) error {
 	if err := checkOutput(output, outputTable, outputJSON); err != nil {
 		return err
 	}
@@ -84,20 +91,25 @@ func runScenarioList(out, errW io.Writer, output string) error {
 		}
 	}()
 	if output == outputJSON {
-		items := scenes.Status()
+		items := schema.Select(scenes.Status(), f)
 		if items == nil {
 			items = []scenariopkg.ScenarioStatus{}
 		}
 		return writeJSON(out, items)
 	}
 
-	scenarios := scenes.List()
-	if len(scenarios) == 0 {
+	all := scenes.List()
+	if len(all) == 0 {
 		fmt.Fprintln(out, "No scenarios found in scenarios/ directory.")
 		return nil
 	}
+	scenarios := schema.Select(all, f)
+	if len(scenarios) == 0 {
+		fmt.Fprintln(out, noMatch("scenarios", f))
+		return nil
+	}
 	w := tabwriter.NewWriter(out, 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "NAME\tDISPLAY NAME\tCATEGORY\tSOURCE\tSTATUS")
+	fmt.Fprintln(w, "NAME\tDISPLAY NAME\tTRACK\tLEVEL\tMIN\tCATEGORY\tSOURCE\tSTATUS")
 	for _, s := range scenarios {
 		status := "inactive"
 		if s.Active {
@@ -107,7 +119,7 @@ func runScenarioList(out, errW io.Writer, output string) error {
 		if source == "" {
 			source = "repo"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", s.Name, s.DisplayName, s.Category, source, status)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", s.Name, s.DisplayName, s.Track, s.Level, minutesCell(s.Minutes), s.Category, source, status)
 	}
 	_ = w.Flush()
 

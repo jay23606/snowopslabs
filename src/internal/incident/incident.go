@@ -53,9 +53,10 @@ type Fault struct {
 	Description string `yaml:"description" json:"description"`
 	// Verified marks a fault that has been tested end to end on a fresh
 	// cluster.
-	Verified      bool          `yaml:"verified,omitempty" json:"verified"`
-	Category      string        `yaml:"category" json:"category"` // workload | network | resources | storage | config
-	Severity      string        `yaml:"severity" json:"severity"` // low | medium | high
+	Verified      bool   `yaml:"verified,omitempty" json:"verified"`
+	Category      string `yaml:"category" json:"category"` // workload | network | resources | storage | config
+	Severity      string `yaml:"severity" json:"severity"` // low | medium | high
+	scenario.Meta `yaml:",inline"`
 	Target        Target        `yaml:"target" json:"target"`
 	Prerequisites Prerequisites `yaml:"prerequisites" json:"prerequisites"`
 	// Requirements is what injecting it needs from the lab, such as the
@@ -110,6 +111,9 @@ func (f *Fault) Validate() error {
 	}
 	if err := f.Requirements.Validate(); err != nil {
 		add("%v", err)
+	}
+	for _, msg := range f.Meta.Validate() {
+		add("%s", msg)
 	}
 	if !validCategories[f.Category] {
 		add("unknown category %q (expected workload | network | resources | storage | config)", f.Category)
@@ -246,6 +250,7 @@ func loadFault(dir string) (*Fault, error) {
 	if err := yaml.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("parsing fault.yaml: %w", err)
 	}
+	f.ApplyDefaults()
 	if err := f.Validate(); err != nil {
 		return nil, err
 	}

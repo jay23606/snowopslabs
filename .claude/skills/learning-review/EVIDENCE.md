@@ -100,7 +100,7 @@ date                                          # per-module end
 ```
 
 Record each module's elapsed time and every moment you looked outside the path
-to proceed. Total vs `estimatedMinutes` is dimension 5.
+to proceed. Total vs `minutes` is dimension 5.
 
 ## L4: state handoff
 

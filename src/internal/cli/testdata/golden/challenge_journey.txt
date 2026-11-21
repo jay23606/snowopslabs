@@ -1,7 +1,7 @@
 $ labctl challenge list
-CHALLENGE                           CATEGORY     PAR       DESCRIPTION
-----------------------------------------------------------------------------
-demo-challenge                      workload     10m       Demo challenge
+CHALLENGE                           TRACK       LEVEL         MIN  CATEGORY     PAR       DESCRIPTION
+----------------------------------------------------------------------------------------------------
+demo-challenge                      kubernetes  intermediate  -    workload     10m       Demo challenge
 
 $ labctl challenge info demo-challenge
 Name:        demo-challenge

@@ -6,7 +6,9 @@
       "category": "reliability",
       "description": "A scenario for go-api",
       "displayName": "Demo scenario",
-      "name": "demo-scenario"
+      "level": "intermediate",
+      "name": "demo-scenario",
+      "track": "kubernetes"
     }
   ]
 }

@@ -34,6 +34,9 @@ displayName: "CrashLoop: a bad config value takes the app down"
 description: "What the victim experiences, not how it's injected"
 category: workload                # workload | network | resources | storage | config
 severity: high                    # low | medium | high
+track: kubernetes                 # kubernetes | cicd | iac; default kubernetes
+level: beginner                   # beginner | intermediate | advanced; default intermediate
+minutes: 15                       # expected time from inject to resolved; optional
 target:                           # templatable - see "Targeting a workload"
   namespace: "{{.WorkloadNamespace}}"
   workload: "{{.WorkloadName}}"
@@ -223,20 +226,20 @@ hatch from every state a learner can leave behind, and scores the result out of
 
 ## Current faults
 
-| Fault | Category | Severity | What breaks |
-|-------|----------|----------|-------------|
-| `crashloop-bad-config` | workload | high | a config change sets the workload's `PORT` to a port that cannot exist and no old pod is left serving - every pod crash-loops with the error in its logs, and every request fails |
-| `bad-deploy-rollout` | workload | medium | the workload is "deployed" with a tag that was never pushed - rollout sticks in ImagePullBackOff |
-| `oom-kill` | resources | high | the workload's memory limit is cut just below what it needs under load, and k6 traffic is started - the pod idles fine and is OOMKilled once requests arrive |
-| `network-blackhole` | network | high | a deny-all-ingress NetworkPolicy lands in the workload's namespace - the service goes dark through the ingress |
-| `service-selector-broken` | config | medium | the workload's Service selector stops matching its pods - endpoints empty, pods perfectly healthy (sneaky) |
-| `stray-pod-behind-service` | network | high | a hand-run, Ready pod copies the Service labels but calls a dead upstream - endpoints have one extra address and a steady fraction of requests burn the SLO |
-| `noisy-neighbor` | resources | low | a batch tenant lands on the workload's node with big CPU requests and no limits, and takes the machine |
-| `pending-unschedulable` | resources | medium | a launch scales the workload to 4 and raises its CPU request past any node's allocatable CPU, so the new replicas stay Pending (`Insufficient cpu`) while the old ones serve; nothing crashes |
-| `liveness-probe-kill` | workload | high | a values update points the liveness probe at `/healthz`, a path the app does not serve; the kubelet kills a healthy app every 40 seconds or so (exit 0, `Liveness probe failed: ... statuscode: 404`) and k6 traffic sees bursts of 5xx |
-| `missing-secret-key` | config | high | a credential rotation renames the key the workload reads from its Secret, then a node rotation replaces the pods; none can start (`CreateContainerConfigError`, `couldn't find key ... in Secret`), a full outage with no logs |
-| `cpu-throttling` | resources | medium | the CPU limit is cut to a third of what the workload uses under the steady k6 load it starts; no restarts, no errors, every pod Ready, but `kubectl top` pins at the limit, throttling climbs and p99 latency goes to seconds |
-| `dns-egress-blocked` | network | high | a default-deny egress policy added for security allows the upstream's port but not DNS; inbound traffic and `/health` work, every pod is Ready, and requests that call the upstream fail with a failed lookup. Unlike `network-blackhole`, the requests arrive |
+| Fault | Category | Severity | Level | Time | What breaks |
+|-------|----------|----------|-------|------|-------------|
+| `crashloop-bad-config` | workload | high | beginner | 15m | a config change sets the workload's `PORT` to a port that cannot exist and no old pod is left serving - every pod crash-loops with the error in its logs, and every request fails |
+| `bad-deploy-rollout` | workload | medium | beginner | 10m | the workload is "deployed" with a tag that was never pushed - rollout sticks in ImagePullBackOff |
+| `oom-kill` | resources | high | beginner | 10m | the workload's memory limit is cut just below what it needs under load, and k6 traffic is started - the pod idles fine and is OOMKilled once requests arrive |
+| `network-blackhole` | network | high | intermediate | 20m | a deny-all-ingress NetworkPolicy lands in the workload's namespace - the service goes dark through the ingress |
+| `service-selector-broken` | config | medium | beginner | 10m | the workload's Service selector stops matching its pods - endpoints empty, pods perfectly healthy (sneaky) |
+| `stray-pod-behind-service` | network | high | advanced | 25m | a hand-run, Ready pod copies the Service labels but calls a dead upstream - endpoints have one extra address and a steady fraction of requests burn the SLO |
+| `noisy-neighbor` | resources | low | intermediate | 15m | a batch tenant lands on the workload's node with big CPU requests and no limits, and takes the machine |
+| `pending-unschedulable` | resources | medium | intermediate | 15m | a launch scales the workload to 4 and raises its CPU request past any node's allocatable CPU, so the new replicas stay Pending (`Insufficient cpu`) while the old ones serve; nothing crashes |
+| `liveness-probe-kill` | workload | high | intermediate | 20m | a values update points the liveness probe at `/healthz`, a path the app does not serve; the kubelet kills a healthy app every 40 seconds or so (exit 0, `Liveness probe failed: ... statuscode: 404`) and k6 traffic sees bursts of 5xx |
+| `missing-secret-key` | config | high | intermediate | 15m | a credential rotation renames the key the workload reads from its Secret, then a node rotation replaces the pods; none can start (`CreateContainerConfigError`, `couldn't find key ... in Secret`), a full outage with no logs |
+| `cpu-throttling` | resources | medium | advanced | 25m | the CPU limit is cut to a third of what the workload uses under the steady k6 load it starts; no restarts, no errors, every pod Ready, but `kubectl top` pins at the limit, throttling climbs and p99 latency goes to seconds |
+| `dns-egress-blocked` | network | high | advanced | 25m | a default-deny egress policy added for security allows the upstream's port but not DNS; inbound traffic and `/health` work, every pod is Ready, and requests that call the upstream fail with a failed lookup. Unlike `network-blackhole`, the requests arrive |
 
 `dns-blackhole` and `pvc-full` were considered and dropped: DNS exec probes
 and PVC behaviour vary too much with the local storage and CNI setup for

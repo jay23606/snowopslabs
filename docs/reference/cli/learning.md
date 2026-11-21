@@ -8,6 +8,7 @@ lives in `~/.snowops/state/<cluster>/learn/` and survives CLI restarts.
 
 ```bash
 labctl learn list                                    # paths with your progress
+labctl learn list --track kubernetes --level beginner   # only that track and level
 labctl learn start kubernetes-foundations            # start or restart a path
 labctl learn next kubernetes-foundations             # verify the current module and advance
 labctl learn next kubernetes-foundations --show-only # print the intro without checking
@@ -18,6 +19,13 @@ labctl learn progress kubernetes-foundations
 `next` shows the next incomplete module's intro and objective, then runs its
 completion check. Run it again once you have done the task to verify and
 advance. If only one path exists, the path argument can be omitted.
+
+`list` shows each path's track, level and minutes. `--track` and `--level` keep
+only the paths that match both; an unknown value is an error that lists the
+valid ones. `GET /api/v2/learn/paths` takes `?track=` and `?level=` and answers
+`track`, `level`, `minutes` and `estimatedMinutes` (the same number, kept for
+older clients). See
+[Track, level and minutes](../scenario-schema.md#track-level-and-minutes).
 
 The web UI's **Check** button does the same through
 `POST /api/v2/learn/paths/{name}/complete` with `{"moduleIdx": n}`. The server
@@ -74,6 +82,10 @@ challenge's faults in order; `abort`, or a passing `submit`, resolves every one.
 `silent: true` keeps its faults' names out of `info` and the API, which give
 only how many there are. A failed `submit` also reports each check as `fault N of M`
 with `not fixed yet`; after every fault passes, the result names the checks again.
+
+`challenge list` shows each challenge's track, level and minutes next to its par
+time, and takes `--track` and `--level` like `learn list`. `GET /api/v2/challenges`
+takes `?track=` and `?level=` and answers the same three fields.
 
 REST: `GET /api/v2/challenges`, `GET /api/v2/challenges/{name}`,
 `GET /api/v2/challenges/status`, `GET /api/v2/challenges/history`,

@@ -67,7 +67,7 @@ capped at 3.5.
 
 **L3 - the cold walk.** Do the whole path in order using only the intro and the
 action ref, timing each module. Every time you look outside the path to proceed
-is a finding, and the total is the evidence for `estimatedMinutes`.
+is a finding, and the total is the evidence for `minutes`.
 
 **C2: the zero-work submit.** Start, submit having fixed nothing, and the score
 must be at or near zero. A challenge that passes for doing nothing is capped at
@@ -107,5 +107,5 @@ path's incident module proves. Fixes are made under
       [challenges/README.md](../../../challenges/README.md).
 - [ ] `make docs-check` passes.
 - [ ] Final report: score, per-dimension table, findings, fixes landed, the
-      timed-run figures behind any `parTime` or `estimatedMinutes` change, and
+      timed-run figures behind any `parTime` or `minutes` change, and
       what you left running.

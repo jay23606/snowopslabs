@@ -4,6 +4,9 @@ verified: true
 displayName: "Mesh Traffic Management"
 description: "Run a canary release for {{.WorkloadName}} on Istio. labctl stages two versions behind one Service and a meshed load client; you write the routing. Shift a 90/10 weighted split, rehearse a slow release with a header-matched latency fault, and lock the canary down with STRICT mTLS, then prove each one from mesh telemetry rather than from the fact that a CR exists."
 category: networking
+track: kubernetes
+level: advanced
+minutes: 40
 prerequisites:
   platform:
     - ingress

@@ -4,8 +4,10 @@
       "category": "workload",
       "description": "Fix the demo fault",
       "displayName": "Demo challenge",
+      "level": "intermediate",
       "name": "demo-challenge",
-      "parTime": "10m"
+      "parTime": "10m",
+      "track": "kubernetes"
     }
   ]
 }

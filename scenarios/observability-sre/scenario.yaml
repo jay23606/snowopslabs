@@ -3,6 +3,9 @@ verified: true
 displayName: "Observability & SRE"
 description: "labctl stands up the three signals (Loki for logs, Tempo behind an Alloy collector for traces, Prometheus rules and SLO dashboards for metrics) and then leaves the wiring to you. Export {{.WorkloadName}}'s spans through the collector, drive real load with k6, follow one request from a log line to its trace, and take an SRE alert from inactive to firing by breaking readiness on purpose."
 category: observability
+track: kubernetes
+level: advanced
+minutes: 45
 prerequisites:
   platform:
     - ingress

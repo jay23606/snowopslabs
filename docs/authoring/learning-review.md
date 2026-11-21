@@ -40,7 +40,7 @@ What the wrapper adds is its own to get right:
 
 ### L0: Read the promise
 
-Read `path.yaml`'s `description`, `tags`, `estimatedMinutes` and the module
+Read `path.yaml`'s `description`, `tags`, `minutes` and the module
 titles, plus the entry in [learn/README.md](../../learn/README.md). Write down
 the arc it promises ("by the end you will have used kubectl, Helm, Prometheus
 and the incident engine") and the time it claims. L3 tests the time; L7 tests
@@ -91,7 +91,7 @@ labctl learn progress <path>
 ```
 
 Record every moment you had to look outside the path to proceed, and compare the
-total elapsed time to `estimatedMinutes`. A path claiming 45 minutes that takes
+total elapsed time to `minutes`. A path claiming 45 minutes that takes
 two hours has misled someone into starting it on a lunch break.
 
 ### L4: State handoff
@@ -235,7 +235,7 @@ annotations, no orphaned namespace, no armed PrometheusRule.
 | 2 | **Teaching quality** | 0.20 | Every intro explains why the module exists and what to look at; difficulty ramps |
 | 3 | **State coherence** | 0.15 | Each module runs in the state the last one left; `learn next` will not skip |
 | 4 | **Arc & outcome** | 0.15 | Finishing delivers the skill the description promised |
-| 5 | **Time honesty** | 0.10 | `estimatedMinutes` matches a real cold walk |
+| 5 | **Time honesty** | 0.10 | `minutes` matches a real cold walk |
 | 6 | **Resumability** | 0.10 | Progress survives a restart; completed modules are safe to re-run |
 | 7 | **Compliance & self-sufficiency** | 0.10 | Refs resolve, assets stay in the directory, no external credentials; finishable without leaving the path |
 

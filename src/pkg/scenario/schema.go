@@ -54,6 +54,8 @@ type Scenario struct {
 	DisplayName string `yaml:"displayName" json:"displayName"`
 	Description string `yaml:"description" json:"description"`
 	Category    string `yaml:"category" json:"category"`
+	// Meta is the track, level and expected minutes the catalog filters on.
+	Meta `yaml:",inline"`
 	// Verified marks a scenario tested end to end on a fresh cluster. The UI
 	// and CLI flag scenarios without it.
 	Verified      bool          `yaml:"verified,omitempty" json:"verified"`
@@ -371,6 +373,9 @@ func (s *Scenario) Validate() error {
 	}
 	if err := s.Requirements.Validate(); err != nil {
 		add("%v", err)
+	}
+	for _, msg := range s.Meta.Validate() {
+		add("%s", msg)
 	}
 	if len(s.Components) > 0 && len(s.Stages) > 0 {
 		add("declare either components (v1) or stages (v2), not both")

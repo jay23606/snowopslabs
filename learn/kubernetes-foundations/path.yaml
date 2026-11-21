@@ -7,7 +7,9 @@ description: >
   Prometheus, and the incident engine on a real Kubernetes cluster. If you
   already have a lab running, the first two modules will pass immediately.
 tags: [kubernetes, observability, incidents]
-estimatedMinutes: 45
+track: kubernetes
+level: beginner
+minutes: 45
 modules:
   - name: init-cluster
     displayName: "Start the cluster"

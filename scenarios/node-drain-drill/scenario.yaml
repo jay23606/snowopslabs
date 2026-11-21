@@ -4,6 +4,9 @@ verified: true
 displayName: "Day-2 Drill: Node Drain Under Load"
 description: "Take a worker node out of service while {{.WorkloadName}} serves live traffic. labctl gives the workload enough replicas to survive; you write the PodDisruptionBudget, cordon and drain the node with kubectl, watch the pods reschedule, and put the node back. The grade is the measured request success rate across the window."
 category: operations
+track: kubernetes
+level: intermediate
+minutes: 25
 prerequisites:
   platform:
     - ingress

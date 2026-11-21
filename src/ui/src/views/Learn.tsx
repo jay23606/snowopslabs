@@ -5,6 +5,8 @@ import { useApiQuery } from '../hooks/useApiQuery'
 import type { LearnPathSummary, LearnPath, LearnProgress, NotifyFn } from '../types'
 import type { ConfirmRequest } from '../components/ConfirmDialog'
 import { Badge } from '../components/Badge'
+import { CatalogFilters, MetaBadges, NoMatches } from '../components/CatalogMeta'
+import { NO_FILTER, matchesMeta, metaFilterActive, type CatalogFilter } from '../lib/catalog'
 import { ErrorState } from '../components/ErrorState'
 import { Icon } from '../components/Icon'
 
@@ -15,6 +17,7 @@ interface LearnProps {
 
 export function Learn({ notify, requestConfirm }: LearnProps) {
   const { data: paths = [], loading, loaded, loadError, refreshing, reload: load } = useApiQuery(qk.learnPaths, api.listLearnPaths)
+  const [meta, setMeta] = useState<CatalogFilter>(NO_FILTER)
   const [selected, setSelected] = useState<{ path: LearnPath; progress: LearnProgress } | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [openingPath, setOpeningPath] = useState<string | null>(null)
@@ -128,6 +131,8 @@ export function Learn({ notify, requestConfirm }: LearnProps) {
     )
   }
 
+  const visiblePaths = paths.filter(p => matchesMeta(p, meta))
+
   return (
     <>
       {loadError && (
@@ -142,21 +147,25 @@ export function Learn({ notify, requestConfirm }: LearnProps) {
 
       <div className="card">
         <div className="card-header">
-          <span className="card-title">Learning Paths ({paths.length})</span>
-          <button className="btn btn-sm" onClick={load} disabled={refreshing}>
-            <Icon name="refresh" size={14} />{refreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <span className="card-title">Learning Paths ({visiblePaths.length}{metaFilterActive(meta) ? ` of ${paths.length}` : ''})</span>
+          <div className="card-tools">
+            {paths.length > 0 && <CatalogFilters value={meta} onChange={setMeta} />}
+            <button className="btn btn-sm" onClick={load} disabled={refreshing}>
+              <Icon name="refresh" size={14} />{refreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
-        {paths.length === 0 ? (
+        {visiblePaths.length === 0 ? (
           <div className="empty-state">
             <span className="empty-icon"><Icon name="learn" size={24} /></span>
-            <div>No learning paths found.</div>
-            <div className="empty-hint">Paths are discovered from <code>learn/&lt;name&gt;/path.yaml</code>.</div>
+            {paths.length > 0
+              ? <NoMatches noun="learning paths" search="" filter={meta} onClear={() => setMeta(NO_FILTER)} />
+              : <><div>No learning paths found.</div><div className="empty-hint">Paths are discovered from <code>learn/&lt;name&gt;/path.yaml</code>.</div></>}
           </div>
         ) : (
           <div className="card-body">
-            {paths.map(p => {
+            {visiblePaths.map(p => {
               const pct = progressPct(p)
               const done = p.completedCount === p.moduleCount && p.moduleCount > 0
               return (
@@ -172,7 +181,8 @@ export function Learn({ notify, requestConfirm }: LearnProps) {
                       {(p.tags || []).map(tag => (
                         <Badge key={tag} variant="category">{tag}</Badge>
                       ))}
-                      <span className="hint-text">{p.moduleCount} modules · ~{p.estimatedMinutes} min</span>
+                      <MetaBadges item={{ ...p, minutes: p.minutes ?? p.estimatedMinutes }} />
+                      <span className="hint-text">{p.moduleCount} modules</span>
                     </div>
                     {p.moduleCount > 0 && (
                       <div className="mt-3 maxw-sm">

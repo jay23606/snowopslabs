@@ -4,6 +4,9 @@ verified: true
 displayName: "Cost & Capacity: Right-Sizing Over-Provisioned Resources"
 description: "{{.WorkloadName}} arrives reserving up to 2000m CPU and 1Gi of memory (as much as the lab's nodes can schedule) - many times what it uses. Drive real traffic, read the gap between reserved and used on the dashboard and in OpenCost, then right-size the requests. Grading has two sides: a request over the waste ceiling fails, and so does one under the peak the workload actually reached, because under-provisioning is how workloads get throttled and OOM-killed."
 category: cost
+track: kubernetes
+level: intermediate
+minutes: 30
 prerequisites:
   platform:
     - cost/opencost

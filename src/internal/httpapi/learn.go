@@ -12,6 +12,7 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/labcheck"
 	"github.com/snowops-oss/snowopslabs/internal/learn"
 	"github.com/snowops-oss/snowopslabs/internal/workload"
+	schema "github.com/snowops-oss/snowopslabs/pkg/scenario"
 )
 
 func learnEngine(s *Server) *learn.Engine {
@@ -23,20 +24,26 @@ func learnEngine(s *Server) *learn.Engine {
 }
 
 func (s *Server) handleLearnPaths(w http.ResponseWriter, r *http.Request) {
+	f, ok := catalogFilter(w, r)
+	if !ok {
+		return
+	}
 	eng := learnEngine(s)
 	paths, err := eng.Paths()
 	if err != nil {
 		respondInternal(w, r, err)
 		return
 	}
+	paths = schema.Select(paths, f)
 	type pathSummary struct {
-		Name             string   `json:"name"`
-		DisplayName      string   `json:"displayName"`
-		Description      string   `json:"description"`
-		Tags             []string `json:"tags"`
-		EstimatedMinutes int      `json:"estimatedMinutes"`
-		ModuleCount      int      `json:"moduleCount"`
-		CompletedCount   int      `json:"completedCount"`
+		Name        string   `json:"name"`
+		DisplayName string   `json:"displayName"`
+		Description string   `json:"description"`
+		Tags        []string `json:"tags"`
+		schema.Meta
+		EstimatedMinutes int `json:"estimatedMinutes"`
+		ModuleCount      int `json:"moduleCount"`
+		CompletedCount   int `json:"completedCount"`
 	}
 	var out []pathSummary
 	for _, p := range paths {
@@ -50,6 +57,7 @@ func (s *Server) handleLearnPaths(w http.ResponseWriter, r *http.Request) {
 			DisplayName:      p.DisplayName,
 			Description:      p.Description,
 			Tags:             p.Tags,
+			Meta:             p.Meta,
 			EstimatedMinutes: p.EstimatedMinutes,
 			ModuleCount:      len(p.Modules),
 			CompletedCount:   done,
