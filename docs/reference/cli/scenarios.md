@@ -28,10 +28,15 @@ the two.
 `--track` (`kubernetes`, `cicd` or `iac`) and `--level` (`beginner`,
 `intermediate` or `advanced`) keep only the scenarios that match both, in the
 table and in JSON. An unknown value is an error that lists the valid ones, and a
-filter that matches nothing prints `No scenarios match ...` in the table and
-`[]` in JSON. `GET /api/v2/scenarios` takes the same values as `?track=` and
+filter that matches nothing prints a line such as `No scenarios on the CI/CD
+track at Advanced level yet.` in the table and `[]` in JSON. `--track k8s` is
+accepted for `kubernetes`. `GET /api/v2/scenarios` takes the same values as `?track=` and
 `?level=`, applied before `limit` and `cursor`; an unknown value is a 400
 `invalid_request`. See [Track, level and minutes](../scenario-schema.md#track-level-and-minutes).
+
+`scenario info` shows `Track:`, `Level:` and `Time:` (for example `~20 min`,
+left out when the scenario states none) under `Category:`. `incident info` and
+`challenge info` show the same lines.
 
 `scenario info` on an active scenario describes it for the app it was activated
 with, so its manifests, snippets and commands name that app, not the default.

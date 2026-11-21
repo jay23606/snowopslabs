@@ -61,7 +61,7 @@ var contract = []contractRow{
 
 	// ── scenarios ──
 	{method: get, route: "/scenarios", status: ok,
-		badPath: "/scenarios?track=k8s", problem: "invalid_request", code: http.StatusBadRequest},
+		badPath: "/scenarios?track=kube", problem: "invalid_request", code: http.StatusBadRequest},
 	{method: get, route: "/scenarios/{name}", path: "/scenarios/demo-scenario", status: ok,
 		badPath: "/scenarios/ghost", problem: "not_found", code: http.StatusNotFound},
 	{method: post, route: "/scenarios/{name}/up", path: "/scenarios/demo-scenario/up", status: accept,
@@ -109,7 +109,7 @@ var contract = []contractRow{
 
 	// ── challenges ──
 	{method: get, route: "/challenges", status: ok,
-		badPath: "/challenges?track=k8s", problem: "invalid_request", code: http.StatusBadRequest},
+		badPath: "/challenges?track=kube", problem: "invalid_request", code: http.StatusBadRequest},
 	{method: get, route: "/challenges/status", status: ok},
 	{method: get, route: "/challenges/history", status: ok, prepare: playedLab},
 	{method: get, route: "/challenges/{name}", path: "/challenges/demo-challenge", status: ok,

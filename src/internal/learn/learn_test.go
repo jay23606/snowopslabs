@@ -338,3 +338,28 @@ func TestCheckStatus_AliasFallback(t *testing.T) {
 		t.Errorf("Status() = %d, want 0 when neither is set", got)
 	}
 }
+
+func TestPaths_ReportsWhyAPathWasLeftOut(t *testing.T) {
+	e, learnDir := makeEngine(t)
+	writePathYAML(t, learnDir, "good", validPathYAML)
+	writePathYAML(t, learnDir, "easy", strings.Replace(validPathYAML, "test-path", "easy", 1)+"level: easy\n")
+	writePathYAML(t, learnDir, "slow", strings.Replace(validPathYAML, "test-path", "slow", 1)+"minutes: \"~30\"\n")
+	if err := os.MkdirAll(filepath.Join(learnDir, "not-a-path"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	paths, err := e.Paths()
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("Paths() = %d paths, %v, want only the valid one", len(paths), err)
+	}
+	errs := e.LoadErrors()
+	if len(errs) != 2 {
+		t.Fatalf("LoadErrors() = %v, want easy and slow", errs)
+	}
+	if got := errs["easy"]; got == nil || !strings.Contains(got.Error(), `level "easy" is not a known level (use beginner, intermediate or advanced)`) {
+		t.Errorf("easy error = %v, want the level and the accepted values", got)
+	}
+	if errs["slow"] == nil {
+		t.Errorf("slow was not reported: %v", errs)
+	}
+}

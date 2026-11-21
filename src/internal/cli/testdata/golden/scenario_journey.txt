@@ -34,6 +34,8 @@ $ labctl scenario info drill
 Name:        drill
 Display:     Drill
 Category:    reliability
+Track:       Kubernetes
+Level:       Intermediate
 Description: Practise on demo-app
 Status:      inactive
 

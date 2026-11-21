@@ -20,7 +20,13 @@ const DEFAULT_LEVEL = 'intermediate'
 const TRACK_LABELS: Record<string, string> = {
   kubernetes: 'Kubernetes',
   cicd: 'CI/CD',
-  iac: 'Infrastructure as code',
+  iac: 'IaC',
+}
+
+const LEVEL_LABELS: Record<string, string> = {
+  beginner: 'Beginner',
+  intermediate: 'Intermediate',
+  advanced: 'Advanced',
 }
 
 /** The item's track; an item that states none is a Kubernetes item. */
@@ -37,6 +43,10 @@ export function trackLabel(track: string): string {
   return TRACK_LABELS[track] ?? track
 }
 
+export function levelLabel(level: string): string {
+  return LEVEL_LABELS[level] ?? level
+}
+
 export function matchesMeta(item: CatalogMeta, filter: CatalogFilter): boolean {
   return (!filter.track || trackOf(item) === filter.track) &&
     (!filter.level || levelOf(item) === filter.level)
@@ -51,12 +61,13 @@ export function minutesLabel(minutes?: number): string {
   return minutes && minutes > 0 ? `~${minutes} min` : ''
 }
 
-/** What the active filters say, as the end of "No scenarios match ...": the
- *  search text and the track and level, joined with "and". */
-export function describeFilters(search: string, filter: CatalogFilter): string {
-  const parts: string[] = []
-  if (search) parts.push(`“${search}”`)
-  if (filter.track) parts.push(`track ${filter.track}`)
-  if (filter.level) parts.push(`level ${filter.level}`)
-  return parts.join(' and ')
+/** The empty-state sentence. Search text reads "No scenarios match “x” on the
+ *  CI/CD track."; pickers alone read "No scenarios on the CI/CD track at
+ *  Advanced level yet." */
+export function emptyMessage(noun: string, search: string, filter: CatalogFilter): string {
+  const where: string[] = []
+  if (filter.track) where.push(`on the ${trackLabel(filter.track)} track`)
+  if (filter.level) where.push(`at ${levelLabel(filter.level)} level`)
+  if (search) return `No ${noun} match “${search}”${where.length ? ' ' + where.join(' ') : ''}.`
+  return `No ${noun} ${where.join(' ')} yet.`
 }

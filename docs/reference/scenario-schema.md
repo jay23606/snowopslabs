@@ -58,7 +58,7 @@ time. Incidents, challenges and learning paths take the same three.
 |---|---|---|
 | `track` | `kubernetes`, `cicd`, `iac` | `kubernetes` |
 | `level` | `beginner`, `intermediate`, `advanced` | `intermediate` |
-| `minutes` | a whole number above 0 | not shown |
+| `minutes` | a whole number, 0 or more (0 means not stated) | not shown |
 
 A **beginner** item is a guided exercise on one concept. An **advanced** one is
 a diagnosis or build that takes several steps, often under load. `minutes` is
@@ -66,10 +66,15 @@ how long a learner who has not seen it needs, not the fastest run. The machine
 size a scenario needs is `requirements`, not a level.
 
 `labctl validate` rejects an unknown track or level, or a `minutes` below 0,
-with the file, line and the values it accepts. `labctl scenario list`,
-`incident list`, `challenge list` and `learn list` take `--track` and `--level`;
+with the file, line and the values it accepts. In the content files the values
+are lowercase. `labctl scenario list`,
+`incident list`, `challenge list` and `learn list` take `--track` and `--level`, which ignore case;
 the matching `/api/v2` list routes take `?track=` and `?level=`. Shipped
 content states all three fields rather than leaning on the defaults.
+
+Messages show the names a learner knows: Kubernetes, CI/CD and IaC; Beginner,
+Intermediate and Advanced. The ids above stay in YAML, flags and JSON. A filter
+also accepts `k8s` for `kubernetes`; content files do not.
 
 `prerequisites.platform` lists everything the scenario's own parts need, so
 `scenario up --deploy-prereqs` works on a bare cluster: `ingress` for a

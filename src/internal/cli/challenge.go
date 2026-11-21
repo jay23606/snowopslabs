@@ -76,6 +76,7 @@ func challengeListCmd() *cobra.Command {
 				return err
 			}
 			out := cmd.OutOrStdout()
+			warnLoadErrors(cmd.ErrOrStderr(), "challenge", eng.LoadErrors())
 			if len(all) == 0 {
 				fmt.Fprintln(out, "No challenges found.")
 				return nil
@@ -117,6 +118,7 @@ func challengeInfoCmd() *cobra.Command {
 			fmt.Fprintf(out, "Name:        %s\n", c.Name)
 			fmt.Fprintf(out, "Display:     %s\n", c.DisplayName)
 			fmt.Fprintf(out, "Category:    %s\n", c.Category)
+			printMeta(out, c.Meta)
 			fmt.Fprintf(out, "Par time:    %s\n", c.ParTime)
 			fmt.Fprintf(out, "Hint cost:   %d%% per hint\n", hintPenaltyValue(c))
 			fmt.Fprintf(out, "Setup:       %s\n", setupSummary(c))

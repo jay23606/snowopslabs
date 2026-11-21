@@ -94,13 +94,13 @@ describe.each(cases)('$name catalog filters', tc => {
     await open()
     const row = screen.getByText(tc.names[0]).closest('.scenario-row') as HTMLElement
     expect(within(row).getByText('CI/CD')).toBeInTheDocument()
-    expect(within(row).getByText('beginner')).toBeInTheDocument()
+    expect(within(row).getByText('Beginner')).toBeInTheDocument()
     expect(within(row).getByText('~20 min')).toBeInTheDocument()
 
     // An item that states nothing shows the defaults and no time.
     const plainRow = screen.getByText(tc.names[2]).closest('.scenario-row') as HTMLElement
     expect(within(plainRow).getByText('Kubernetes')).toBeInTheDocument()
-    expect(within(plainRow).getByText('intermediate')).toBeInTheDocument()
+    expect(within(plainRow).getByText('Intermediate')).toBeInTheDocument()
     expect(within(plainRow).queryByText(/min$/)).toBeNull()
   })
 
@@ -125,7 +125,7 @@ describe.each(cases)('$name catalog filters', tc => {
     await user.selectOptions(screen.getByLabelText('Filter by track'), 'cicd')
     await user.selectOptions(screen.getByLabelText('Filter by level'), 'advanced')
 
-    expect(screen.getByText(`No ${tc.noun} match track cicd and level advanced.`)).toBeInTheDocument()
+    expect(screen.getByText(`No ${tc.noun} on the CI/CD track at Advanced level yet.`)).toBeInTheDocument()
     expect(screen.queryByText(tc.names[0])).toBeNull()
 
     await user.click(screen.getByRole('button', { name: 'Clear filters' }))
@@ -147,7 +147,7 @@ describe('text search with the pickers', () => {
 
     await user.selectOptions(screen.getByLabelText('Filter by track'), 'cicd')
     await user.type(screen.getByLabelText('Filter scenarios'), 'mesh')
-    expect(screen.getByText('No scenarios match “mesh” and track cicd.')).toBeInTheDocument()
+    expect(screen.getByText('No scenarios match “mesh” on the CI/CD track.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Clear filters' }))
     expect(screen.getByLabelText('Filter scenarios')).toHaveValue('')

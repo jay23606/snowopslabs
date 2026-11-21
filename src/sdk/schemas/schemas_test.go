@@ -74,7 +74,8 @@ func TestMetaEnumsMatchTheCode(t *testing.T) {
 	for _, kind := range []string{"scenario", "incident", "path", "challenge"} {
 		var doc struct {
 			Properties map[string]struct {
-				Enum []string `json:"enum"`
+				Enum    []string `json:"enum"`
+				Minimum *int     `json:"minimum"`
 			} `json:"properties"`
 		}
 		if err := json.Unmarshal(ByKind[kind], &doc); err != nil {
@@ -85,8 +86,18 @@ func TestMetaEnumsMatchTheCode(t *testing.T) {
 				t.Errorf("%s schema: %s enum = %v, want %v", kind, field, got, want)
 			}
 		}
-		if _, ok := doc.Properties["minutes"]; !ok {
-			t.Errorf("%s schema has no minutes property", kind)
+		// Go reads 0 as "not stated", so the schema must accept it.
+		for _, field := range []string{"minutes", "estimatedMinutes"} {
+			p, ok := doc.Properties[field]
+			if !ok {
+				if field == "minutes" {
+					t.Errorf("%s schema has no minutes property", kind)
+				}
+				continue
+			}
+			if p.Minimum == nil || *p.Minimum != 0 {
+				t.Errorf("%s schema: %s minimum = %v, want 0", kind, field, p.Minimum)
+			}
 		}
 	}
 }

@@ -98,6 +98,9 @@ func TestCatalogFilters_API(t *testing.T) {
 			if got := get("?track=kubernetes&level=intermediate"); has(got, rt.tracked) || !has(got, rt.fixture) {
 				t.Errorf("the defaults = %v, want %s and not %s", got, rt.fixture, rt.tracked)
 			}
+			if got := get("?track=k8s&level=intermediate"); has(got, rt.tracked) || !has(got, rt.fixture) {
+				t.Errorf("?track=k8s = %v, want the kubernetes item %s", got, rt.fixture)
+			}
 			if got := get("?track=cicd&level=advanced"); has(got, rt.tracked) {
 				t.Errorf("?track=cicd&level=advanced = %v, must not include the beginner item", got)
 			}
@@ -105,7 +108,7 @@ func TestCatalogFilters_API(t *testing.T) {
 				t.Errorf("?track=iac = %v, want an empty list", got)
 			}
 
-			for _, bad := range []string{"track=k8s", "level=easy"} {
+			for _, bad := range []string{"track=kube", "level=easy"} {
 				w := do(s, http.MethodGet, rt.route+"?"+bad, "", nil)
 				assertProblem(t, w, http.StatusBadRequest, "invalid_request", instanceOf(t, rt.route+"?"+bad))
 				if !strings.Contains(w.Body.String(), "use ") {

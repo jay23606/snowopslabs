@@ -58,6 +58,40 @@ func TestMeta_ApplyDefaults(t *testing.T) {
 	}
 }
 
+func TestParseFilter_AliasNormalises(t *testing.T) {
+	f, err := ParseFilter(" k8s ", "")
+	if err != nil || f.Track != "kubernetes" {
+		t.Errorf("ParseFilter(k8s) = %+v, %v, want track kubernetes", f, err)
+	}
+	if errs := (Meta{Track: "k8s"}).Validate(); len(errs) != 1 {
+		t.Errorf("content must stay strict about aliases, Validate() = %v", errs)
+	}
+}
+
+func TestLabels(t *testing.T) {
+	for _, id := range Tracks {
+		if TrackLabel(id) == id {
+			t.Errorf("track %q has no display label", id)
+		}
+	}
+	for _, id := range Levels {
+		if LevelLabel(id) == id {
+			t.Errorf("level %q has no display label", id)
+		}
+	}
+	tests := []struct{ got, want string }{
+		{TrackLabel("kubernetes"), "Kubernetes"}, {TrackLabel("cicd"), "CI/CD"}, {TrackLabel("iac"), "IaC"},
+		{TrackLabel("mystery"), "mystery"},
+		{LevelLabel("beginner"), "Beginner"}, {LevelLabel("intermediate"), "Intermediate"},
+		{LevelLabel("advanced"), "Advanced"}, {LevelLabel("mystery"), "mystery"},
+	}
+	for _, tt := range tests {
+		if tt.got != tt.want {
+			t.Errorf("label = %q, want %q", tt.got, tt.want)
+		}
+	}
+}
+
 func TestParseFilter(t *testing.T) {
 	tests := []struct {
 		track, level string
@@ -66,7 +100,7 @@ func TestParseFilter(t *testing.T) {
 		{"", "", ""},
 		{"cicd", "beginner", ""},
 		{" iac ", "", ""},
-		{"k8s", "", `unknown track "k8s": use kubernetes, cicd or iac`},
+		{"kube", "", `unknown track "kube": use kubernetes, cicd or iac`},
 		{"", "easy", `unknown level "easy": use beginner, intermediate or advanced`},
 	}
 	for _, tt := range tests {
@@ -152,5 +186,22 @@ func TestScenarioValidate_RejectsBadMeta(t *testing.T) {
 	err := s.Validate()
 	if err == nil || !strings.Contains(err.Error(), `track "k8s" is not a known track`) {
 		t.Errorf("Validate() = %v, want the track problem", err)
+	}
+}
+
+func TestParseFilter_IgnoresCase(t *testing.T) {
+	tests := []struct {
+		track, level string
+		want         Filter
+	}{
+		{"Kubernetes", "Advanced", Filter{Track: "kubernetes", Level: "advanced"}},
+		{"CICD", "BEGINNER", Filter{Track: "cicd", Level: "beginner"}},
+		{"K8S", "", Filter{Track: "kubernetes"}},
+	}
+	for _, tt := range tests {
+		got, err := ParseFilter(tt.track, tt.level)
+		if err != nil || got != tt.want {
+			t.Errorf("ParseFilter(%q, %q) = %+v, %v, want %+v", tt.track, tt.level, got, err, tt.want)
+		}
 	}
 }

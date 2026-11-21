@@ -18,7 +18,7 @@
     "category": { "type": "string" },
     "track": { "type": "string", "enum": ["kubernetes", "cicd", "iac"], "description": "Area of platform work. Absent means kubernetes." },
     "level": { "type": "string", "enum": ["beginner", "intermediate", "advanced"], "description": "Difficulty. Absent means intermediate." },
-    "minutes": { "type": "integer", "minimum": 1, "description": "Expected time in minutes." },
+    "minutes": { "type": "integer", "minimum": 0, "description": "Expected time in minutes. 0 means not stated." },
     "requires": { "type": "array", "uniqueItems": true, "items": { "type": "string", "enum": ["k8s"] }, "description": "Targets this needs. Absent means [k8s]. List k8s as well as any other target when the cluster is used too." },
     "verified": { "type": "boolean", "description": "True when this scenario has been confirmed end-to-end (activates, checks pass, tears down cleanly) on a fresh cluster. Absent/false means unverified - usable but not yet vouched for." },
     "prerequisites": {

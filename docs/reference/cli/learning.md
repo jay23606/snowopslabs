@@ -22,7 +22,9 @@ advance. If only one path exists, the path argument can be omitted.
 
 `list` shows each path's track, level and minutes. `--track` and `--level` keep
 only the paths that match both; an unknown value is an error that lists the
-valid ones. `GET /api/v2/learn/paths` takes `?track=` and `?level=` and answers
+valid ones. A path that fails to load (for example `level: easy`) is left out
+of the list, and a warning on stderr names its directory, the reason and the fix.
+`GET /api/v2/learn/paths` takes `?track=` and `?level=` and answers
 `track`, `level`, `minutes` and `estimatedMinutes` (the same number, kept for
 older clients). See
 [Track, level and minutes](../scenario-schema.md#track-level-and-minutes).
@@ -84,7 +86,8 @@ only how many there are. A failed `submit` also reports each check as `fault N o
 with `not fixed yet`; after every fault passes, the result names the checks again.
 
 `challenge list` shows each challenge's track, level and minutes next to its par
-time, and takes `--track` and `--level` like `learn list`. `GET /api/v2/challenges`
+time, and takes `--track` and `--level` like `learn list`. A challenge that
+fails to load is left out, with a warning on stderr that names it and the fix. `GET /api/v2/challenges`
 takes `?track=` and `?level=` and answers the same three fields.
 
 REST: `GET /api/v2/challenges`, `GET /api/v2/challenges/{name}`,

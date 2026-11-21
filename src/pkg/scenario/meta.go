@@ -15,6 +15,28 @@ var Tracks = []string{"kubernetes", "cicd", "iac"}
 // Levels are the difficulty steps, easiest first.
 var Levels = []string{"beginner", "intermediate", "advanced"}
 
+var trackLabels = map[string]string{"kubernetes": "Kubernetes", "cicd": "CI/CD", "iac": "IaC"}
+
+var levelLabels = map[string]string{"beginner": "Beginner", "intermediate": "Intermediate", "advanced": "Advanced"}
+
+// TrackLabel is the name a learner reads for a track id, such as "CI/CD" for
+// "cicd". An unknown id is returned unchanged.
+func TrackLabel(id string) string {
+	if l, ok := trackLabels[id]; ok {
+		return l
+	}
+	return id
+}
+
+// LevelLabel is the name a learner reads for a level id, such as "Beginner"
+// for "beginner". An unknown id is returned unchanged.
+func LevelLabel(id string) string {
+	if l, ok := levelLabels[id]; ok {
+		return l
+	}
+	return id
+}
+
 // Defaults for an item that sets neither field.
 const (
 	DefaultTrack = "kubernetes"
@@ -68,10 +90,21 @@ type Filter struct {
 	Level string
 }
 
+// trackAliases are short spellings a filter accepts for a track id. Content
+// files must still use the id.
+var trackAliases = map[string]string{"k8s": "kubernetes"}
+
 // ParseFilter checks the values of a --track or ?track= filter, so a typo is
-// an error that names the valid values instead of an empty list.
+// an error that names the valid values instead of an empty list. Case is
+// ignored, and a track alias such as k8s is normalised to its id.
 func ParseFilter(track, level string) (Filter, error) {
-	f := Filter{Track: strings.TrimSpace(track), Level: strings.TrimSpace(level)}
+	f := Filter{
+		Track: strings.ToLower(strings.TrimSpace(track)),
+		Level: strings.ToLower(strings.TrimSpace(level)),
+	}
+	if id, ok := trackAliases[f.Track]; ok {
+		f.Track = id
+	}
 	if f.Track != "" && !slices.Contains(Tracks, f.Track) {
 		return Filter{}, fmt.Errorf("unknown track %q: use %s", f.Track, orList(Tracks))
 	}

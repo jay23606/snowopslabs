@@ -37,6 +37,8 @@ $ labctl incident info demo-fault
 Name:        demo-fault
 Display:     Demo fault
 Category:    workload
+Track:       Kubernetes
+Level:       Intermediate
 Severity:    low
 Target:      demo-app/demo-app
 Description: demo-app is broken
