@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/snowops-oss/snowopslabs/internal/target"
 	"github.com/snowops-oss/snowopslabs/pkg/scenario"
 )
 
@@ -86,6 +87,69 @@ func TestMetaEnumsMatchTheCode(t *testing.T) {
 		}
 		if _, ok := doc.Properties["minutes"]; !ok {
 			t.Errorf("%s schema has no minutes property", kind)
+		}
+	}
+}
+
+// TestTargetEnumsMatchTheRegistry keeps every target list in the schemas
+// equal to the registry's, so an editor offers exactly the targets labctl
+// validate accepts, on every field that takes one.
+func TestTargetEnumsMatchTheRegistry(t *testing.T) {
+	want := target.NewRegistry(nil).Names()
+	type prop struct {
+		Type  string   `json:"type"`
+		Enum  []string `json:"enum"`
+		Items *prop    `json:"items"`
+	}
+	type object struct {
+		Properties map[string]prop `json:"properties"`
+	}
+	var doc struct {
+		object
+		Defs map[string]object `json:"$defs"`
+	}
+	// Each entry is a schema kind and the place in it that holds a target.
+	places := []struct{ kind, def, field string }{
+		{"scenario", "", "requires"},
+		{"scenario", "component", "target"},
+		{"scenario", "check", "target"},
+		{"incident", "", "requires"},
+		{"challenge", "", "requires"},
+		{"check", "", "target"},
+	}
+	for _, p := range places {
+		if err := json.Unmarshal(ByKind[p.kind], &doc); err != nil {
+			t.Fatal(err)
+		}
+		props := doc.Properties
+		if p.def != "" {
+			props = doc.Defs[p.def].Properties
+		}
+		got, ok := props[p.field]
+		if !ok {
+			t.Errorf("%s schema %s has no %s property", p.kind, p.def, p.field)
+			continue
+		}
+		enum := got.Enum
+		if got.Items != nil {
+			enum = got.Items.Enum
+		}
+		if !slices.Equal(enum, want) {
+			t.Errorf("%s schema %s %s enum = %v, want %v", p.kind, p.def, p.field, enum, want)
+		}
+	}
+
+	// The incident's inject and resolve each take a target.
+	var inc struct {
+		Properties map[string]object `json:"properties"`
+	}
+	if err := json.Unmarshal(ByKind["incident"], &inc); err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []string{"inject", "resolve"} {
+		got := inc.Properties[step].Properties["target"].Enum
+		if !slices.Equal(got, want) {
+			t.Errorf("incident schema %s.target enum = %v, want %v", step, got, want)
 		}
 	}
 }

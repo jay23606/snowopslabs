@@ -25,6 +25,10 @@ const (
 	KeyDomainSuffix = "DOMAIN_SUFFIX"
 )
 
+// EnvLabKubeconfig names the lab's kubeconfig for scripts that must not read
+// the generic KUBECONFIG.
+const EnvLabKubeconfig = "SNOWOPS_LAB_KUBECONFIG"
+
 // Outputs is what a provider's up.sh recorded about the target it brought up.
 type Outputs struct {
 	// Kubeconfig is the path of the file that reaches the cluster. Empty for
@@ -103,4 +107,31 @@ func (o Outputs) validate(provider string) error {
 		}
 	}
 	return nil
+}
+
+// KubeEnv is the part of Env that reaches the cluster: the kubeconfig under
+// both the name kubectl reads and labctl's own. Incluster has no kubeconfig,
+// so it sets nothing. KubeContext is not exported because the kubeconfig
+// holds exactly one context.
+func (o Outputs) KubeEnv() map[string]string {
+	if o.Kubeconfig == "" {
+		return map[string]string{}
+	}
+	return map[string]string{KeyKubeconfig: o.Kubeconfig, EnvLabKubeconfig: o.Kubeconfig}
+}
+
+// Env is what a run that uses the target receives: KubeEnv plus where the
+// cluster's ingress is. Empty values are left out.
+func (o Outputs) Env() map[string]string {
+	env := o.KubeEnv()
+	for k, v := range map[string]string{
+		KeyHTTPPort:     o.HTTPPort,
+		KeyHTTPSPort:    o.HTTPSPort,
+		KeyDomainSuffix: o.DomainSuffix,
+	} {
+		if v != "" {
+			env[k] = v
+		}
+	}
+	return env
 }

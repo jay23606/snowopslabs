@@ -19,6 +19,7 @@
     "track": { "type": "string", "enum": ["kubernetes", "cicd", "iac"], "description": "Area of platform work. Absent means kubernetes." },
     "level": { "type": "string", "enum": ["beginner", "intermediate", "advanced"], "description": "Difficulty. Absent means intermediate." },
     "minutes": { "type": "integer", "minimum": 1, "description": "Expected time in minutes." },
+    "requires": { "type": "array", "uniqueItems": true, "items": { "type": "string", "enum": ["k8s"] }, "description": "Targets this needs. Absent means [k8s]. List k8s as well as any other target when the cluster is used too." },
     "verified": { "type": "boolean", "description": "True when this scenario has been confirmed end-to-end (activates, checks pass, tears down cleanly) on a fresh cluster. Absent/false means unverified - usable but not yet vouched for." },
     "prerequisites": {
       "type": "object",
@@ -105,6 +106,7 @@
           "description": "Reuse an already-installed Helm release instead of upgrading it, so a scenario never rewrites a release the platform owns."
         },
         "path": { "type": "string" },
+        "target": { "type": "string", "enum": ["k8s"], "description": "Target it runs against. Absent means k8s. Must be listed in requires." },
         "set": { "type": "object", "additionalProperties": { "type": "string" } },
         "script": { "type": "string" },
         "uninstallScript": {
@@ -135,7 +137,8 @@
         "operator": { "type": "string", "enum": ["==", "!=", "<", "<=", ">", ">=", "contains"] },
         "value": { "type": "string" },
         "script": { "type": "string" },
-        "timeoutSeconds": { "type": "integer", "minimum": 0 }
+        "timeoutSeconds": { "type": "integer", "minimum": 0 },
+        "target": { "type": "string", "enum": ["k8s"], "description": "Target it runs against. Absent means k8s. Must be listed in requires." }
       },
       "allOf": [
         { "if": { "properties": { "type": { "const": "http" } } }, "then": { "required": ["url"] } },

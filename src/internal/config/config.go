@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -208,12 +209,31 @@ func Load(projectRoot string) (*Config, error) {
 		cfg.ScriptEnv[k] = resolveEnv(fileVals, k, fileVals[k])
 	}
 	// Every child process reaches the lab's cluster through its own kubeconfig.
-	if cfg.Kubeconfig != "" {
-		cfg.ScriptEnv["KUBECONFIG"] = cfg.Kubeconfig
-		cfg.ScriptEnv["SNOWOPS_LAB_KUBECONFIG"] = cfg.Kubeconfig
-	}
+	maps.Copy(cfg.ScriptEnv, cfg.K8sOutputs().KubeEnv())
 
 	return cfg, nil
+}
+
+// K8sOutputs is what the lab's Kubernetes target provides to a run. Every run
+// that uses the default target gets its environment from here.
+func (c *Config) K8sOutputs() target.Outputs {
+	return target.Outputs{
+		Kubeconfig:   c.Kubeconfig,
+		KubeContext:  c.KubeContext,
+		HTTPPort:     c.HTTPPort,
+		HTTPSPort:    c.HTTPSPort,
+		DomainSuffix: c.DomainSuffix,
+	}
+}
+
+// TargetOutputs returns the outputs of the named target, k8s when name is
+// empty. A target the lab cannot supply is an error.
+func (c *Config) TargetOutputs(name string) (target.Outputs, error) {
+	switch name {
+	case "", target.DefaultName:
+		return c.K8sOutputs(), nil
+	}
+	return target.Outputs{}, fmt.Errorf("no outputs for target %q: only %s is supplied today", name, target.DefaultName)
 }
 
 // LoadAppConfig reads app-specific config from apps/<name>/app.env.

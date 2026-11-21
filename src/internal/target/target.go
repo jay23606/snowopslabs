@@ -16,11 +16,13 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/snowops-oss/snowopslabs/pkg/scenario"
 )
 
 // DefaultName is the target every scenario, incident and challenge uses
 // unless it names another.
-const DefaultName = "k8s"
+const DefaultName = scenario.DefaultTarget
 
 // Scripts a provider directory holds. up.sh and down.sh create and remove the
 // target; status.sh exits 0 when it is ready.

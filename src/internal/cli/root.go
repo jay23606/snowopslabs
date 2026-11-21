@@ -201,6 +201,8 @@ func bindWorkload(appName string, explicit bool) error {
 	incEng.Workload = bound
 	incEng.AlertmanagerURL = labcheck.AlertmanagerURL(cfg)
 	attachAdmissionGate()
+	scenes.RequireTargets = requireTargets
+	incEng.RequireTargets = requireTargets
 	return nil
 }
 

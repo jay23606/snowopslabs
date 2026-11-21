@@ -24,6 +24,7 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/display"
 	"github.com/snowops-oss/snowopslabs/internal/executor"
 	"github.com/snowops-oss/snowopslabs/internal/snippet"
+	"github.com/snowops-oss/snowopslabs/internal/target"
 	"github.com/snowops-oss/snowopslabs/internal/tmpl"
 	"github.com/snowops-oss/snowopslabs/internal/workload"
 	"github.com/snowops-oss/snowopslabs/pkg/checks"
@@ -57,12 +58,19 @@ type Fault struct {
 	Category      string `yaml:"category" json:"category"` // workload | network | resources | storage | config
 	Severity      string `yaml:"severity" json:"severity"` // low | medium | high
 	scenario.Meta `yaml:",inline"`
-	Target        Target        `yaml:"target" json:"target"`
-	Prerequisites Prerequisites `yaml:"prerequisites" json:"prerequisites"`
+	// Needs lists the targets the fault requires; see scenario.Needs.
+	scenario.Needs `yaml:",inline"`
+	Target         Target        `yaml:"target" json:"target"`
+	Prerequisites  Prerequisites `yaml:"prerequisites" json:"prerequisites"`
 	// Requirements is what injecting it needs from the lab, such as the
 	// memory a noisy-neighbour workload takes.
 	Requirements scenario.Requirements `yaml:"requirements,omitempty" json:"requirements"`
 	Detection    checks.Check          `yaml:"detection" json:"detection"` // passes ⇔ the fault is RESOLVED
+	// Inject and Resolve say which target inject.sh and resolve.sh run
+	// against. The top-level target: names the broken workload, so these
+	// are separate keys.
+	Inject  Step `yaml:"inject,omitempty" json:"inject,omitzero"`
+	Resolve Step `yaml:"resolve,omitempty" json:"resolve,omitzero"`
 	// ExpectAlert names the Alertmanager alert this fault should fire.
 	// inject.sh applies the matching PrometheusRule from alerts/rule.yaml,
 	// and `incident status` reports whether the alert is firing.
@@ -74,6 +82,13 @@ type Fault struct {
 	Snippets   []scenario.Snippet   `yaml:"snippets,omitempty" json:"snippets,omitempty"`
 
 	Dir string `yaml:"-" json:"-"`
+}
+
+// Step is the optional settings of a fault's inject or resolve script.
+type Step struct {
+	// Target is the target the script runs against. Empty means k8s. The
+	// fault must list it in requires.
+	Target string `yaml:"target,omitempty" json:"target,omitempty"`
 }
 
 // Target names what the fault breaks. Scripts receive it as TARGET_NAMESPACE
@@ -132,6 +147,13 @@ func (f *Fault) Validate() error {
 			add("detection script %q must be a relative path inside the fault directory", f.Detection.Script)
 		}
 	}
+	for _, msg := range f.ValidateTargets([]scenario.TargetUse{
+		{Where: "detection", Target: f.Detection.Target},
+		{Where: "inject", Target: f.Inject.Target},
+		{Where: "resolve", Target: f.Resolve.Target},
+	}) {
+		add("%s", msg)
+	}
 	for _, msg := range scenario.ValidateReferences(f.References) {
 		add("%s", msg)
 	}
@@ -171,6 +193,9 @@ type Engine struct {
 	// IngressURLSuffix is DomainSuffix plus a non-default ingress port; see
 	// config.IngressURLSuffix. The constructor sets it to DomainSuffix.
 	IngressURLSuffix string
+	// RequireTargets, when set, is asked before a fault is injected whether
+	// the targets it requires are ready; an error blocks the injection.
+	RequireTargets target.RequireFunc
 	// Admit, when set, is asked before a fault is injected whether the lab
 	// has room for it; an error blocks the injection.
 	Admit AdmitFunc
@@ -554,6 +579,11 @@ func (e *Engine) Inject(name string, exec *executor.Executor, force, silent bool
 	}
 	if err := e.preflight(f); err != nil {
 		return nil, err
+	}
+	if e.RequireTargets != nil {
+		if err := e.RequireTargets(context.Background(), f.RequiredTargets()); err != nil {
+			return nil, fmt.Errorf("incident %s cannot start: %w", f.Name, err)
+		}
 	}
 	if e.Admit != nil {
 		d, err := e.Demand(f)

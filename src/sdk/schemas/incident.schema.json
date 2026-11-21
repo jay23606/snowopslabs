@@ -23,6 +23,7 @@
     "track": { "type": "string", "enum": ["kubernetes", "cicd", "iac"], "description": "Area of platform work. Absent means kubernetes." },
     "level": { "type": "string", "enum": ["beginner", "intermediate", "advanced"], "description": "Difficulty. Absent means intermediate." },
     "minutes": { "type": "integer", "minimum": 1, "description": "Expected time in minutes." },
+    "requires": { "type": "array", "uniqueItems": true, "items": { "type": "string", "enum": ["k8s"] }, "description": "Targets this needs. Absent means [k8s]. List k8s as well as any other target when the cluster is used too." },
     "target": {
       "type": "object",
       "required": ["namespace", "workload"],
@@ -32,6 +33,8 @@
         "workload": { "type": "string" }
       }
     },
+    "inject": { "type": "object", "additionalProperties": false, "description": "Settings of inject.sh. The top-level target names the broken workload, so the script's target is set here.", "properties": { "target": { "type": "string", "enum": ["k8s"], "description": "Target it runs against. Absent means k8s. Must be listed in requires." } } },
+    "resolve": { "type": "object", "additionalProperties": false, "description": "Settings of resolve.sh.", "properties": { "target": { "type": "string", "enum": ["k8s"], "description": "Target it runs against. Absent means k8s. Must be listed in requires." } } },
     "prerequisites": {
       "type": "object",
       "additionalProperties": false,

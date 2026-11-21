@@ -74,8 +74,10 @@ func TestScriptEnv_LabKubeconfig(t *testing.T) {
 	t.Setenv("PROMETHEUS_URL", "")
 	t.Setenv("ALERTMANAGER_URL", "")
 	with := strings.Join(ScriptEnv(&config.Config{Profile: "k3d", Kubeconfig: "/state/lab/kubeconfig"}, workload.Workload{}), "\n")
-	if !strings.Contains(with, "KUBECONFIG=/state/lab/kubeconfig") {
-		t.Errorf("env does not carry the lab kubeconfig:\n%s", with)
+	for _, want := range []string{"KUBECONFIG=/state/lab/kubeconfig", "SNOWOPS_LAB_KUBECONFIG=/state/lab/kubeconfig"} {
+		if !strings.Contains(with, want) {
+			t.Errorf("env does not carry %q:\n%s", want, with)
+		}
 	}
 	without := strings.Join(ScriptEnv(&config.Config{Profile: "incluster"}, workload.Workload{}), "\n")
 	if strings.Contains(without, "KUBECONFIG") {

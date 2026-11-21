@@ -38,6 +38,9 @@ type Lab struct {
 	StateDir string
 	Runner   toolchain.Runner
 	Registry *Registry
+	// Providers maps each target the lab has to the provider that supplies
+	// it, such as k8s to k3d.
+	Providers map[string]string
 }
 
 // KubeconfigPath is the lab's own kubeconfig.
@@ -137,4 +140,54 @@ func reason(stderr string, exitCode int) string {
 		return line
 	}
 	return fmt.Sprintf("status.sh exited %d without a reason", exitCode)
+}
+
+// RequireFunc checks that the named targets are ready and returns an error
+// that says what to run when one is not. Lab.Require is the implementation;
+// engines take the function so they stay free of the lab's wiring.
+type RequireFunc func(ctx context.Context, names []string) error
+
+// Require checks that every named target is ready, so content that needs
+// them does not start against one that is missing. An empty list means the
+// default target. The error names the first target that is not ready and
+// the command that brings it up. A provider without status.sh is not
+// blocked, since its state cannot be known.
+func (l Lab) Require(ctx context.Context, names []string) error {
+	if len(names) == 0 {
+		names = []string{DefaultName}
+	}
+	checked := map[string]bool{}
+	for _, name := range names {
+		if checked[name] {
+			continue
+		}
+		checked[name] = true
+		t, err := l.Registry.Lookup(name)
+		if err != nil {
+			return err
+		}
+		provider := l.Providers[t.Name]
+		if provider == "" {
+			return fmt.Errorf("target %s has no provider in this lab; it can be supplied by: %s",
+				t.Name, strings.Join(t.Providers, ", "))
+		}
+		st, err := l.Status(ctx, t.Name, provider)
+		switch {
+		case errors.Is(err, ErrNoStatusScript):
+			continue
+		case err != nil:
+			return fmt.Errorf("checking target %s: %w", t.Name, err)
+		case !st.Ready:
+			return fmt.Errorf("target %s is not ready: %s\n%s", t.Name, st.Reason, upAdvice(t.Name, provider))
+		}
+	}
+	return nil
+}
+
+// upAdvice is the command that brings a target up.
+func upAdvice(name, provider string) string {
+	if name == DefaultName {
+		return "Check the lab with: labctl status\nBring it up with:   labctl init"
+	}
+	return fmt.Sprintf("Bring it up with its provider: runtimes/%s/%s", provider, UpScript)
 }

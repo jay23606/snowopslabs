@@ -8,10 +8,12 @@ package labcheck
 
 import (
 	"context"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -70,8 +72,9 @@ func ScriptEnv(cfg *config.Config, w workload.Workload) []string {
 	}
 	// Check scripts and kubectl checks read the lab's cluster, never the
 	// user's current kubectl context.
-	if cfg.Kubeconfig != "" {
-		env = append(env, "KUBECONFIG="+cfg.Kubeconfig)
+	kube := cfg.K8sOutputs().KubeEnv()
+	for _, k := range slices.Sorted(maps.Keys(kube)) {
+		env = append(env, k+"="+kube[k])
 	}
 	return env
 }

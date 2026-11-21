@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"time"
 
 	"github.com/snowops-oss/snowopslabs/internal/capacity"
@@ -84,10 +85,7 @@ func scriptEnv() map[string]string {
 	env["LAB_STATE_DIR"] = cfg.StateDir
 	// Every run reaches the lab's cluster through its own kubeconfig, never
 	// through the user's current kubectl context.
-	if cfg.Kubeconfig != "" {
-		env["KUBECONFIG"] = cfg.Kubeconfig
-		env["SNOWOPS_LAB_KUBECONFIG"] = cfg.Kubeconfig
-	}
+	maps.Copy(env, cfg.K8sOutputs().KubeEnv())
 	if verbose {
 		env["LABCTL_VERBOSE"] = "1"
 	}

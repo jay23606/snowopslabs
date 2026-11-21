@@ -138,6 +138,7 @@ func (g *Grader) Checks(c *challenge.Challenge) ([]GradeCheck, error) {
 			Operator:       gc.Operator,
 			Value:          gc.Value,
 			TimeoutSeconds: gc.TimeoutSeconds,
+			Target:         gc.Target,
 		})
 		cs = append(cs, GradeCheck{Check: k, Dir: g.Config.ProjectRoot})
 	}

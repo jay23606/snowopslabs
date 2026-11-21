@@ -61,6 +61,8 @@ type GCheck struct {
 	Operator       string `yaml:"operator,omitempty"`
 	Value          string `yaml:"value,omitempty"`
 	TimeoutSeconds int    `yaml:"timeoutSeconds,omitempty"`
+	// Target is the target the check runs against. Empty means k8s.
+	Target string `yaml:"target,omitempty"`
 }
 
 // Challenge is the top-level challenge.yaml schema.
@@ -71,10 +73,12 @@ type Challenge struct {
 	Category    string `yaml:"category"`
 	// Meta is the track, level and expected minutes the catalog filters on.
 	scenario.Meta `yaml:",inline"`
-	ParTime       string      `yaml:"parTime"` // e.g. "10m"
-	Setup         SetupSpec   `yaml:"setup"`
-	Grading       GradingSpec `yaml:"grading"`
-	HintPenalty   int         `yaml:"hintPenalty"` // % per hint; default 5
+	// Needs lists the targets the challenge requires; see scenario.Needs.
+	scenario.Needs `yaml:",inline"`
+	ParTime        string      `yaml:"parTime"` // e.g. "10m"
+	Setup          SetupSpec   `yaml:"setup"`
+	Grading        GradingSpec `yaml:"grading"`
+	HintPenalty    int         `yaml:"hintPenalty"` // % per hint; default 5
 	// Silent keeps the setup's names from the learner until the run ends:
 	// finding the faults is the exercise.
 	Silent bool `yaml:"silent,omitempty"`
@@ -110,6 +114,11 @@ func (c *Challenge) Validate() []string {
 		errs = append(errs, "grading: either useDetectionCheck or checks must be set")
 	}
 	errs = append(errs, c.Meta.Validate()...)
+	uses := make([]scenario.TargetUse, 0, len(c.Grading.Checks))
+	for _, gc := range c.Grading.Checks {
+		uses = append(uses, scenario.TargetUse{Where: fmt.Sprintf("check %q", gc.Name), Target: gc.Target})
+	}
+	errs = append(errs, c.ValidateTargets(uses)...)
 	if c.ParTime != "" {
 		if _, err := time.ParseDuration(c.ParTime); err != nil {
 			errs = append(errs, "parTime: invalid duration format (use e.g. 10m, 1h)")

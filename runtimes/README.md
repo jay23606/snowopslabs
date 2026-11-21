@@ -51,6 +51,11 @@ keeps, and `outputs.env` is rewritten whenever that record changes
 validates the file: a missing required key, or a port that is not a number,
 is an error that says to run `labctl init` again.
 
+A run that uses the target gets these values in its environment: `KUBECONFIG`
+and `SNOWOPS_LAB_KUBECONFIG` (the file above), `HTTP_PORT`, `HTTPS_PORT` and
+`DOMAIN_SUFFIX`. Content picks the target with `target:` and says it needs it
+with `requires:` ([Targets](../docs/reference/scenario-schema.md#targets-requires-and-target)).
+
 ## Helpers
 
 `_lib/` holds what providers share. They are sourced, never run.

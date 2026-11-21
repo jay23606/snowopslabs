@@ -62,7 +62,17 @@ func labTarget() target.Lab {
 		StateDir: cfg.StateDir,
 		Runner:   toolchain.NewExec(),
 		Registry: target.NewRegistry(target.DiscoverProviders(cfg.ProjectRoot)),
+		// The k8s target is supplied by the lab's runtime profile.
+		Providers: map[string]string{target.DefaultName: cfg.Profile},
 	}
+}
+
+// requireTargets stops content from starting against a target that is not
+// ready. It is what the scenario and incident engines call before they begin,
+// and what the commands call first so nothing is installed for content that
+// cannot run.
+func requireTargets(ctx context.Context, names []string) error {
+	return labTarget().Require(ctx, names)
 }
 
 // printTarget says which cluster the lab runs against and, when the user's

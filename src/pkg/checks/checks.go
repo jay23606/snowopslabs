@@ -63,6 +63,10 @@ type Check struct {
 	// exercise, such as taking a backup. Verify shows it as PENDING rather than
 	// FAIL. It still counts as not passed.
 	Pending bool `yaml:"pending,omitempty" json:"pending,omitempty"`
+
+	// Target is the target the check runs against. Empty means k8s. The item
+	// that holds the check must list it in requires.
+	Target string `yaml:"target,omitempty" json:"target,omitempty"`
 }
 
 // fieldOwners maps each type-specific field to the check types that may set

@@ -446,6 +446,25 @@ func TestGrader_Checks_ExpandsTemplates(t *testing.T) {
 	}
 }
 
+// A challenge check's target reaches the check the runner executes.
+func TestGrader_Checks_CarriesTheTarget(t *testing.T) {
+	l := newLab(t)
+	c := &challenge.Challenge{
+		Setup: challenge.SetupSpec{Type: "incident", Ref: "demo-fault"},
+		Grading: challenge.GradingSpec{Checks: []challenge.GCheck{
+			{Name: "default", Type: "script", Script: "a.sh"},
+			{Name: "named", Type: "script", Script: "b.sh", Target: "k8s"},
+		}},
+	}
+	cs, err := l.grader.Checks(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cs[0].Check.Target != "" || cs[1].Check.Target != "k8s" {
+		t.Errorf("targets = %q, %q; want empty and k8s", cs[0].Check.Target, cs[1].Check.Target)
+	}
+}
+
 func TestGrader_SetupAndCleanup(t *testing.T) {
 	tests := []struct {
 		name      string

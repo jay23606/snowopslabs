@@ -5,6 +5,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -72,5 +73,27 @@ func TestLoad_LabKubeconfigBeatsTheUsersKubeconfig(t *testing.T) {
 	}
 	if got, want := cfg.ScriptEnv["KUBECONFIG"], filepath.Join(cfg.StateDir, "kubeconfig"); got != want {
 		t.Errorf("ScriptEnv[KUBECONFIG] = %q, want the lab's %q", got, want)
+	}
+}
+
+// A run that uses the k8s target gets what the lab recorded about it, and no
+// other target has outputs yet.
+func TestConfig_TargetOutputs(t *testing.T) {
+	cfg := &Config{
+		Kubeconfig: "/state/lab/kubeconfig", KubeContext: "k3d-lab",
+		HTTPPort: "8080", HTTPSPort: "8443", DomainSuffix: "lab.localhost",
+	}
+	for _, name := range []string{"", "k8s"} {
+		out, err := cfg.TargetOutputs(name)
+		if err != nil {
+			t.Fatalf("TargetOutputs(%q): %v", name, err)
+		}
+		if out.Kubeconfig != "/state/lab/kubeconfig" || out.KubeContext != "k3d-lab" ||
+			out.HTTPPort != "8080" || out.HTTPSPort != "8443" || out.DomainSuffix != "lab.localhost" {
+			t.Errorf("TargetOutputs(%q) = %+v, want the lab's own values", name, out)
+		}
+	}
+	if _, err := cfg.TargetOutputs("git-forge"); err == nil || !strings.Contains(err.Error(), `"git-forge"`) {
+		t.Errorf("TargetOutputs(git-forge) error = %v, want it to name the target", err)
 	}
 }

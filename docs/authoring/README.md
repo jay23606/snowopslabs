@@ -73,6 +73,15 @@ cost to the learner, and inside a hosted lab
 The reasoning, and the examples it already decided (OpenTofu over Terraform,
 no MinIO), are in [ADR-0017](../adr/0017-tracks-and-targets.md#tool-licences).
 
+## Targets
+
+Content declares what it needs with `requires: [k8s]` and names the target of
+a component, check or fault script with `target:`. Both default to `k8s`, so
+leave them out until a scenario uses another target. The fields, the checks
+`labctl validate` makes and what `scenario up` does when a target is not ready
+are in the
+[scenario schema](../reference/scenario-schema.md#targets-requires-and-target).
+
 ## Distribution
 
 There is no pack format or registry. Content lives in directories, so
