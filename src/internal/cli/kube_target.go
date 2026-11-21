@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/snowops-oss/snowopslabs/internal/config"
+	"github.com/snowops-oss/snowopslabs/internal/display"
 	"github.com/snowops-oss/snowopslabs/internal/target"
 	"github.com/snowops-oss/snowopslabs/internal/toolchain"
 )
@@ -82,7 +83,13 @@ func printTarget(ctx context.Context, out io.Writer, runner toolchain.Runner, la
 	if lab.KubeContext == "" {
 		return
 	}
-	fmt.Fprintf(out, "  Target:   k8s (%s), context %s\n", lab.Profile, lab.KubeContext)
+	// Learners never need the word "target"; the useful fact is which
+	// kubeconfig labctl uses, so they can point plain kubectl at it too.
+	where := "context " + lab.KubeContext
+	if lab.Kubeconfig != "" {
+		where = "kubeconfig " + display.Path(lab.Kubeconfig, "", "")
+	}
+	fmt.Fprintf(out, "  Lab:      %s cluster, %s\n", lab.Profile, where)
 	if note := currentContextNote(ctx, runner, lab); note != "" {
 		fmt.Fprintf(out, "  Note:     %s\n", note)
 	}
