@@ -13,6 +13,7 @@ set -euo pipefail
 #   HTTPS_PORT       host port mapped to node :443 (default: 443)
 #   AGENTS           number of worker nodes (default: 1)
 #   KIND_NODE_IMAGE  pin the node image, e.g. kindest/node:v1.29.4 (default: kind's)
+#   REGISTRY_MIRRORS <registry>=<mirror>,... pulled through first (default: none)
 
 CLUSTER_NAME="${1:-${CLUSTER_NAME:-snowops-kind}}"
 HTTP_PORT="${HTTP_PORT:-80}"
@@ -34,6 +35,9 @@ done
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/kubeconfig.sh"
 # shellcheck source=../_lib/outputs.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/outputs.sh"
+
+# shellcheck source=../_lib/mirrors.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/mirrors.sh"
 
 ensure_docker_running || exit 1
 
@@ -103,6 +107,8 @@ if [ "$http_port" != "$HTTP_PORT" ] || [ "$https_port" != "$HTTPS_PORT" ]; then
   HTTPS_PORT="$https_port"
 fi
 
+mirrors="$(mirror_pairs)" || exit 1
+
 # Build the kind config. The control-plane node carries the ingress-ready label
 # and the host port mappings; worker nodes (AGENTS) give day-2 drills somewhere
 # to reschedule pods.
@@ -117,6 +123,12 @@ trap 'rm -f "$config_file"' EXIT
 {
   echo "kind: Cluster"
   echo "apiVersion: kind.x-k8s.io/v1alpha4"
+  if [ -n "$mirrors" ]; then
+    echo "containerdConfigPatches:"
+    echo "  - |-"
+    echo '    [plugins."io.containerd.grpc.v1.cri".registry]'
+    echo '      config_path = "/etc/containerd/certs.d"'
+  fi
   echo "nodes:"
   echo "  - role: control-plane"
   [ -n "$node_image_line" ] && echo "$node_image_line"
@@ -145,6 +157,11 @@ echo "Creating kind cluster '$CLUSTER_NAME' (control-plane + ${AGENTS} worker(s)
 # kind adds the context to the user's kubeconfig and switches to it, so the
 # create runs against that file; the lab's own kubeconfig is written after.
 with_user_kubeconfig kind create cluster --name "$CLUSTER_NAME" --config "$config_file" --wait 120s
+
+if [ -n "$mirrors" ]; then
+  # shellcheck disable=SC2046 # one node name per word
+  kind_apply_mirrors "$mirrors" $(kind get nodes --name "$CLUSTER_NAME")
+fi
 
 refresh_kubeconfigs || exit 1
 kubectl config use-context "kind-$CLUSTER_NAME"
