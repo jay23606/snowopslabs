@@ -13,10 +13,13 @@ CLUSTER_NAME="${1:-${CLUSTER_NAME:-snowops}}"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/docker.sh"
 # shellcheck source=../_lib/kubeconfig.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/kubeconfig.sh"
-# The cluster's recorded ports and its kubeconfig go with it, whether or not it
-# still exists.
+# shellcheck source=../_lib/outputs.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/outputs.sh"
+# The cluster's recorded ports, its kubeconfig and its outputs go with it,
+# whether or not it still exists.
 forget_cluster "$CLUSTER_NAME"
 forget_lab_kubeconfig "$CLUSTER_NAME"
+forget_outputs "$CLUSTER_NAME"
 
 echo -e "${YELLOW}Shutting down k3d cluster '${CLUSTER_NAME}'...${NC}"
 

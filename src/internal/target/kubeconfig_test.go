@@ -190,8 +190,8 @@ func TestUserContext(t *testing.T) {
 		if err != nil || got != "kind-dev" {
 			t.Fatalf("UserContext = %q, %v; want kind-dev", got, err)
 		}
-		if call := fake.CallStrings()[0]; !strings.Contains(call, "--kubeconfig "+filepath.Join(home, ".kube", "config")) {
-			t.Errorf("kubectl ran as %q, want it pinned to the default kubeconfig", call)
+		if got, want := fake.Calls()[0].Env["KUBECONFIG"], filepath.Join(home, ".kube", "config"); got != want {
+			t.Errorf("KUBECONFIG = %q, want the default kubeconfig %q", got, want)
 		}
 	})
 

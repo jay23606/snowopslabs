@@ -14,6 +14,7 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/run"
 	labsvc "github.com/snowops-oss/snowopslabs/internal/service/lab"
 	"github.com/snowops-oss/snowopslabs/internal/store"
+	"github.com/snowops-oss/snowopslabs/internal/target"
 )
 
 // `labctl lab up|down|status` run through the run engine, so each bring-up and
@@ -38,12 +39,19 @@ var labEngineFactory = func(ctx context.Context) (svc *labsvc.Service, st *store
 	return svc, st, eng, cleanup, nil
 }
 
-// clusterProber checks the cluster with kubectl for `lab status --live`. It
-// never returns an error; an unreachable cluster gives Reachable=false.
+// clusterProber checks the cluster for `lab status --live`: first with the
+// runtime's own status.sh, whose reason it reports when the cluster is not
+// ready, then with kubectl for the version and node count. It never returns an
+// error; an unreachable cluster gives Reachable=false.
 func clusterProber() labsvc.Prober {
 	return func(ctx context.Context) (labsvc.Liveness, error) {
-		pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		pctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
+		// A runtime with no status.sh, or one that cannot run, is left to the
+		// kubectl probe below.
+		if st, err := labTarget().Status(pctx, target.DefaultName, cfg.Profile); err == nil && !st.Ready {
+			return labsvc.Liveness{Reachable: false, Detail: st.Reason}, nil
+		}
 		info, err := k8s.GetClusterInfo(pctx)
 		if err != nil || info == nil || !info.Connected {
 			l := labsvc.Liveness{Reachable: false}

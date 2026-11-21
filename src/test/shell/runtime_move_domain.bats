@@ -85,3 +85,13 @@ teardown() {
   grep -q "^  name: grafana$" "$STATE/replaced"
   ! grep -Eq "^  (resourceVersion|uid|creationTimestamp|generation):" "$STATE/replaced"
 }
+
+@test "move-domain moves the domain suffix in the lab's outputs too" {
+  state_dir="$SNOWOPS_HOME/state/lab"
+  mkdir -p "$state_dir"
+  printf 'KUBECONFIG=%s/kubeconfig\nKUBE_CONTEXT=k3d-lab\nHTTP_PORT=8080\nDOMAIN_SUFFIX=k3d.local\n' "$state_dir" >"$state_dir/outputs.env"
+  run bash "$ROOT/runtimes/_lib/move-domain.sh" lab k3d.local lab.localhost
+  [ "$status" -eq 0 ]
+  grep -qx "DOMAIN_SUFFIX=lab.localhost" "$state_dir/outputs.env"
+  grep -qx "KUBE_CONTEXT=k3d-lab" "$state_dir/outputs.env"
+}

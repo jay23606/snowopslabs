@@ -1,6 +1,7 @@
 $ labctl status
 === Cluster ===
   Target:   k8s (k3d), context k3d-clitest
+  Note:     your current kubectl context is "k3d-contract", not the lab's "k3d-clitest". labctl runs only against the lab; plain kubectl uses "k3d-contract" until you run: kubectl config use-context k3d-clitest
   Context:  k3d-contract
   Server:   https://127.0.0.1:<port>
   Version:  v1.33.6+k3s1

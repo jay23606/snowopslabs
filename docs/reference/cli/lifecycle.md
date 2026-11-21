@@ -180,6 +180,11 @@ labctl lab status          # state from the run history - fast, no cluster calls
 labctl lab status --live   # additionally probe the cluster for reachability
 ```
 
+`lab status --live` runs the profile's `status.sh` first. When the cluster is
+not ready it prints the reason that script gives, for example
+`unreachable (the API server of 'snowops' is not answering)`; when it is ready,
+kubectl adds the version and node count.
+
 Which profile is used comes from `PROFILE` (`k3d`, `kind` or `incluster`); see
 [runtime profiles](../../runtime-profiles.md).
 

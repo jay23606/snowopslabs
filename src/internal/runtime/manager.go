@@ -1,29 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package runtime discovers the cluster runtimes under runtimes/ (k3d, kind,
-// incluster), reports which one kubectl is using, and runs their up and down
-// scripts.
+// incluster), reports which are ready from their status.sh, and runs their up
+// and down scripts.
 package runtime
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
-	"strings"
+	"sync"
 	"time"
 
+	"github.com/snowops-oss/snowopslabs/internal/config"
 	"github.com/snowops-oss/snowopslabs/internal/executor"
-	"github.com/snowops-oss/snowopslabs/internal/k8s"
+	"github.com/snowops-oss/snowopslabs/internal/target"
+	"github.com/snowops-oss/snowopslabs/internal/toolchain"
 )
 
 // RuntimeInfo describes a discovered runtime and its status.
 type RuntimeInfo struct {
 	Name    string `json:"name"`
-	Active  bool   `json:"active"`  // context exists in kubeconfig and is reachable
-	Current bool   `json:"current"` // is the current kubectl context
+	Active  bool   `json:"active"`  // status.sh reports the cluster ready
+	Current bool   `json:"current"` // the cluster's context is the user's current kubectl context
 }
 
 // Manager discovers and manages cluster runtimes (k3d, kind, incluster).
@@ -33,58 +33,75 @@ type Manager struct {
 	runtimes    []string
 
 	// injectable for tests
-	getCurrentCtx func(ctx context.Context) (string, error)
-	contextExists func(ctx context.Context, name string) (bool, error)
+	status      func(ctx context.Context, runtime string) (target.Status, error)
+	outputs     func(runtime string) (target.Outputs, error)
+	userContext func(ctx context.Context) (string, error)
 }
 
-// NewManager scans the runtimes/ directory for available runtimes.
+// NewManager scans the runtimes/ directory for available runtimes. A runtime's
+// state comes from its status.sh and the outputs its up.sh recorded, never from
+// kubectl's current context.
 func NewManager(projectRoot, clusterName string) *Manager {
-	m := &Manager{
-		ProjectRoot:   projectRoot,
-		ClusterName:   clusterName,
-		getCurrentCtx: k8s.GetCurrentContext,
-		contextExists: func(ctx context.Context, name string) (bool, error) {
-			out, err := k8s.RunKubectl(ctx, "config", "get-contexts", name, "--no-headers")
-			return err == nil && strings.TrimSpace(out) != "", nil
-		},
-	}
+	runner := toolchain.NewExec()
+	// Without a state directory there are no outputs to read, and the status
+	// scripts fall back to their own default location.
+	stateDir, _ := config.StateDir(clusterName)
+	m := &Manager{ProjectRoot: projectRoot, ClusterName: clusterName}
 	m.scan()
+	lab := target.Lab{
+		Root:     projectRoot,
+		Cluster:  clusterName,
+		StateDir: stateDir,
+		Runner:   runner,
+		Registry: target.NewRegistry(m.runtimes),
+	}
+	m.status = func(ctx context.Context, name string) (target.Status, error) {
+		return lab.Status(ctx, target.DefaultName, name)
+	}
+	m.outputs = lab.Outputs
+	m.userContext = func(ctx context.Context) (string, error) {
+		return target.UserContext(ctx, runner, target.UserKubeconfig())
+	}
 	return m
 }
 
-// List returns all discovered runtimes with their current status.
+// listTimeout bounds the whole of List; every runtime is checked at once.
+const listTimeout = 8 * time.Second
+
+// List returns all discovered runtimes with their current status. A runtime is
+// active when its status.sh reports the cluster ready, and current when its
+// recorded context is the one the user's kubectl has selected. A runtime whose
+// state cannot be read is reported as not active.
 func (m *Manager) List() []RuntimeInfo {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), listTimeout)
 	defer cancel()
 
-	currentCtx, _ := m.getCurrentCtx(ctx)
+	userCtx, _ := m.userContext(ctx)
 
-	var infos []RuntimeInfo
-	for _, name := range m.runtimes {
-		info := RuntimeInfo{Name: name}
-
-		expectedCtx := m.expectedContext(name)
-		if expectedCtx == "" {
-			// No reliable context name available - report as not active.
-			infos = append(infos, info)
-			continue
-		}
-
-		if currentCtx == expectedCtx {
-			info.Current = true
-			info.Active = true
-		} else {
-			checkCtx, checkCancel := context.WithTimeout(context.Background(), 2*time.Second)
-			exists, _ := m.contextExists(checkCtx, expectedCtx)
-			checkCancel()
-			if exists {
-				info.Active = true
-			}
-		}
-
-		infos = append(infos, info)
+	infos := make([]RuntimeInfo, len(m.runtimes))
+	var wg sync.WaitGroup
+	for i, name := range m.runtimes {
+		wg.Go(func() {
+			infos[i] = m.info(ctx, name, userCtx)
+		})
 	}
+	wg.Wait()
 	return infos
+}
+
+func (m *Manager) info(ctx context.Context, name, userCtx string) RuntimeInfo {
+	info := RuntimeInfo{Name: name}
+	st, err := m.status(ctx, name)
+	if err != nil || !st.Ready {
+		return info
+	}
+	info.Active = true
+	kubeContext := target.ExpectedContext(name, m.ClusterName, "")
+	if out, err := m.outputs(name); err == nil && out.KubeContext != "" {
+		kubeContext = out.KubeContext
+	}
+	info.Current = kubeContext != "" && kubeContext == userCtx
+	return info
 }
 
 // Names returns the names of all discovered runtimes.
@@ -97,7 +114,7 @@ func (m *Manager) Activate(name string, exec *executor.Executor) error {
 	if !m.exists(name) {
 		return fmt.Errorf("runtime %q not found", name)
 	}
-	scriptPath := filepath.Join("runtimes", name, "up.sh")
+	scriptPath := filepath.Join("runtimes", name, target.UpScript)
 	_, err := exec.RunScriptStreamed(fmt.Sprintf("Activate %s", name), scriptPath, m.ClusterName)
 	return err
 }
@@ -108,7 +125,7 @@ func (m *Manager) ActivateWith(actionID, name string, exec *executor.Executor) e
 	if !m.exists(name) {
 		return fmt.Errorf("runtime %q not found", name)
 	}
-	scriptPath := filepath.Join("runtimes", name, "up.sh")
+	scriptPath := filepath.Join("runtimes", name, target.UpScript)
 	return exec.RunScriptStreamedWith(actionID, fmt.Sprintf("Activate %s", name), scriptPath, m.ClusterName)
 }
 
@@ -117,7 +134,7 @@ func (m *Manager) Deactivate(name string, exec *executor.Executor) error {
 	if !m.exists(name) {
 		return fmt.Errorf("runtime %q not found", name)
 	}
-	scriptPath := filepath.Join("runtimes", name, "down.sh")
+	scriptPath := filepath.Join("runtimes", name, target.DownScript)
 	_, err := exec.RunScriptStreamed(fmt.Sprintf("Deactivate %s", name), scriptPath, m.ClusterName)
 	return err
 }
@@ -127,67 +144,14 @@ func (m *Manager) DeactivateWith(actionID, name string, exec *executor.Executor)
 	if !m.exists(name) {
 		return fmt.Errorf("runtime %q not found", name)
 	}
-	scriptPath := filepath.Join("runtimes", name, "down.sh")
+	scriptPath := filepath.Join("runtimes", name, target.DownScript)
 	return exec.RunScriptStreamedWith(actionID, fmt.Sprintf("Deactivate %s", name), scriptPath, m.ClusterName)
 }
 
 func (m *Manager) scan() {
-	runtimesDir := filepath.Join(m.ProjectRoot, "runtimes")
-	entries, err := os.ReadDir(runtimesDir)
-	if err != nil {
-		return
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		upScript := filepath.Join(runtimesDir, entry.Name(), "up.sh")
-		if _, err := os.Stat(upScript); err == nil {
-			m.runtimes = append(m.runtimes, entry.Name())
-		}
-	}
+	m.runtimes = target.DiscoverProviders(m.ProjectRoot)
 }
 
 func (m *Manager) exists(name string) bool {
 	return slices.Contains(m.runtimes, name)
-}
-
-// expectedContext returns the kubectl context name expected for a runtime.
-// Returns "" if the context name cannot be determined reliably.
-func (m *Manager) expectedContext(name string) string {
-	switch name {
-	case "k3d":
-		return "k3d-" + m.ClusterName
-	default:
-		// For cloud runtimes the context name varies per deployment.
-		// Read KUBECONFIG_CONTEXT from runtime.env; if absent, report unknown.
-		envFile := filepath.Join(m.ProjectRoot, "runtimes", name, "runtime.env")
-		if ctx := readEnvKey(envFile, "KUBECONFIG_CONTEXT"); ctx != "" {
-			return ctx
-		}
-		return ""
-	}
-}
-
-// readEnvKey parses a shell env file (KEY=value lines) and returns the value
-// for the given key, or "" if not found or the file cannot be read.
-func readEnvKey(path, key string) string {
-	f, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = f.Close() }()
-
-	prefix := key + "="
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "#") || line == "" {
-			continue
-		}
-		if after, ok := strings.CutPrefix(line, prefix); ok {
-			return strings.TrimSpace(after)
-		}
-	}
-	return ""
 }

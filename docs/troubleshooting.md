@@ -30,6 +30,7 @@ page collects them by symptom. `labctl doctor` checks your machine, and
 |---|---|
 | The dashboard or `labctl status` says the cluster is **unreachable** | Docker or colima is stopped, usually after a reboot, or out of memory. Run `labctl init`; it keeps your apps and scenarios. |
 | `labctl status` or `labctl doctor` says your current kubectl context is another cluster | Harmless to labctl: it runs only against the lab's own kubeconfig (`~/.snowops/state/<cluster>/kubeconfig`), never your current context. Plain `kubectl` still uses your context; `kubectl config use-context <lab context>` points it at the lab. |
+| `labctl lab status --live` says `unreachable (…)` with `has no cluster named`, `has no kubeconfig` or `is not answering` | That sentence comes from the runtime's `status.sh` and names the cause. No cluster or no kubeconfig: run `labctl init`. Not answering: Docker is usually stopped or out of memory; `labctl doctor`, then `labctl init`. |
 | `Not enough memory for <scenario>` | Run the commands it prints: `labctl scenario down` for a scenario, `labctl platform down` for components only it used or nothing uses. Or resize Docker as printed. [Resources](resources.md) lists what each scenario needs. |
 | `platform prerequisite(s) not installed` or `required app(s) not deployed` | Install what it names, or re-run with `--deploy-prereqs`. |
 | An app pod is in `ImagePullBackOff` | Its image was not built into the cluster. `labctl app build <name>`, or use `--deploy-prereqs`. |

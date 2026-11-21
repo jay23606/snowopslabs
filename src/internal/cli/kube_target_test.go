@@ -15,6 +15,7 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/config"
 	"github.com/snowops-oss/snowopslabs/internal/k8s"
 	"github.com/snowops-oss/snowopslabs/internal/labcheck"
+	"github.com/snowops-oss/snowopslabs/internal/target"
 	"github.com/snowops-oss/snowopslabs/internal/toolchain"
 	"github.com/snowops-oss/snowopslabs/internal/workload"
 )
@@ -36,7 +37,7 @@ esac
 func TestLabKubeconfig_ReachesEveryRunPath(t *testing.T) {
 	l := newTerminal(t)
 	t.Setenv("KUBECONFIG", "/home/me/.kube/config")
-	os.Unsetenv(userKubeconfigEnv)
+	os.Unsetenv(target.UserKubeconfigEnv)
 	l.Stub(t, "kubectl", colleagueKubectl)
 	writeDrill(t, l)
 	l.Write(t, "scenarios/drill/setup.sh", "#!/usr/bin/env bash\nprintf '%s' \"$KUBECONFIG\" >\"$(dirname \"$0\")/SEEN\"\n")
@@ -87,8 +88,8 @@ func TestLabKubeconfig_ReachesEveryRunPath(t *testing.T) {
 		}
 	})
 	t.Run("the user's kubeconfig is kept for the runtime scripts", func(t *testing.T) {
-		if got := os.Getenv(userKubeconfigEnv); got != "/home/me/.kube/config" {
-			t.Errorf("%s = %q, want the user's own kubeconfig", userKubeconfigEnv, got)
+		if got := os.Getenv(target.UserKubeconfigEnv); got != "/home/me/.kube/config" {
+			t.Errorf("%s = %q, want the user's own kubeconfig", target.UserKubeconfigEnv, got)
 		}
 	})
 }
@@ -107,7 +108,7 @@ func TestLabKubeconfig_MissingContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			l := newTerminal(t)
-			os.Unsetenv(userKubeconfigEnv)
+			os.Unsetenv(target.UserKubeconfigEnv)
 			l.Stub(t, "kubectl", "#!/bin/sh\nexit 1\n")
 
 			r := l.run(tt.args...)
@@ -158,8 +159,8 @@ func TestUseLabCluster(t *testing.T) {
 	reset := func(t *testing.T, kubeconfig string) {
 		t.Helper()
 		t.Setenv("KUBECONFIG", kubeconfig)
-		t.Setenv(userKubeconfigEnv, "")
-		os.Unsetenv(userKubeconfigEnv)
+		t.Setenv(target.UserKubeconfigEnv, "")
+		os.Unsetenv(target.UserKubeconfigEnv)
 	}
 
 	t.Run("the user's kubeconfig is recorded before KUBECONFIG moves to the lab's", func(t *testing.T) {
@@ -172,8 +173,8 @@ func TestUseLabCluster(t *testing.T) {
 		if got := os.Getenv("KUBECONFIG"); got != lab.Kubeconfig {
 			t.Errorf("KUBECONFIG = %q, want %q", got, lab.Kubeconfig)
 		}
-		if got := os.Getenv(userKubeconfigEnv); got != "/home/me/.kube/config" {
-			t.Errorf("%s = %q, want the user's kubeconfig", userKubeconfigEnv, got)
+		if got := os.Getenv(target.UserKubeconfigEnv); got != "/home/me/.kube/config" {
+			t.Errorf("%s = %q, want the user's kubeconfig", target.UserKubeconfigEnv, got)
 		}
 		if got := fake.Calls()[0].Env["KUBECONFIG"]; got != "/home/me/.kube/config" {
 			t.Errorf("kubectl cut the context from %q, want the user's kubeconfig", got)
@@ -189,8 +190,8 @@ func TestUseLabCluster(t *testing.T) {
 				t.Fatalf("useLabCluster: %v", err)
 			}
 		}
-		if got := os.Getenv(userKubeconfigEnv); got != "/home/me/.kube/config" {
-			t.Errorf("%s = %q after two runs, want the user's kubeconfig", userKubeconfigEnv, got)
+		if got := os.Getenv(target.UserKubeconfigEnv); got != "/home/me/.kube/config" {
+			t.Errorf("%s = %q after two runs, want the user's kubeconfig", target.UserKubeconfigEnv, got)
 		}
 	})
 
@@ -317,7 +318,7 @@ func TestCurrentContextNote(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("KUBECONFIG", "/home/me/.kube/config")
-			os.Unsetenv(userKubeconfigEnv)
+			os.Unsetenv(target.UserKubeconfigEnv)
 			got := currentContextNote(t.Context(), tt.kubectl(toolchain.NewFake()), tt.lab)
 			if len(tt.want) == 0 && got != "" {
 				t.Errorf("note = %q, want none", got)
@@ -333,7 +334,7 @@ func TestCurrentContextNote(t *testing.T) {
 
 func TestPrintTarget(t *testing.T) {
 	t.Setenv("KUBECONFIG", "/home/me/.kube/config")
-	os.Unsetenv(userKubeconfigEnv)
+	os.Unsetenv(target.UserKubeconfigEnv)
 	lab := &config.Config{Profile: "kind", KubeContext: "kind-lab"}
 
 	var out bytes.Buffer

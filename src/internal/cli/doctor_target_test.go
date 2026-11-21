@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/snowops-oss/snowopslabs/internal/target"
 	"github.com/snowops-oss/snowopslabs/internal/toolchain"
 )
 
@@ -56,7 +57,7 @@ func TestRunDoctor_NamesTheLabTarget(t *testing.T) {
 			projectDir = l.Root
 			t.Cleanup(func() { projectDir = saved })
 			t.Setenv("KUBECONFIG", "/home/me/.kube/config")
-			os.Unsetenv(userKubeconfigEnv)
+			os.Unsetenv(target.UserKubeconfigEnv)
 
 			var out bytes.Buffer
 			runner := currentContextRunner{Fake: fakeEnv("16 17179869184"), current: tt.current}

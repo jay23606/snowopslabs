@@ -275,6 +275,21 @@ predates the file gets it on first use, cut from the context labctl expects
 (`internal/target`). The `incluster` profile has no file and keeps its
 ServiceAccount. See [runtime profiles](../runtime-profiles.md#the-labs-own-kubeconfig).
 
+### 5.2 Targets and providers
+
+A lab is a set of named **targets**, and the Kubernetes cluster is the default
+one, `k8s` ([ADR-0017](../adr/0017-tracks-and-targets.md)). `internal/target`
+holds the registry of targets, the outputs loader and the provider status
+check. The runtime profiles under `runtimes/` (k3d, kind, incluster) are the
+providers of `k8s`. A provider has `up.sh`, `down.sh` and `status.sh`, and its
+`up.sh` records what it produced (kubeconfig, context, ingress ports, domain
+suffix) in `outputs.env` in the lab's state directory
+([contract](../../runtimes/README.md)). Up and down run through the run engine
+under the `lab` lock key. `status.sh` is polled, so `internal/target` runs it
+through the toolchain runner with a timeout and no run record, and
+`runtime.Manager` reports a runtime as active from its answer. An unknown
+target name is refused with the names the lab has.
+
 ## 6. Content model
 
 All content is YAML, loaded and validated by `internal/catalog` at startup:

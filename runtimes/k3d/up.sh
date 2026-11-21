@@ -32,6 +32,8 @@ NODE_CHECK_INTERVAL="${NODE_CHECK_INTERVAL:-10}"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/k3d-serverlb.sh"
 # shellcheck source=../_lib/kubeconfig.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/kubeconfig.sh"
+# shellcheck source=../_lib/outputs.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/outputs.sh"
 
 ensure_docker_running || exit 1
 
@@ -402,9 +404,11 @@ if k3d cluster list "$CLUSTER_NAME" &>/dev/null; then
   echo "Cluster '$CLUSTER_NAME' is healthy; skipping creation."
   raise_inotify_limits
   record_ingress_ports "$CLUSTER_NAME" "k3d-${CLUSTER_NAME}-serverlb"
+  write_outputs "$CLUSTER_NAME" "$(lab_kubeconfig_file "$CLUSTER_NAME")" "k3d-$CLUSTER_NAME"
   exit 0
 fi
 
 create_cluster
 raise_inotify_limits
 record_ingress_ports "$CLUSTER_NAME" "k3d-${CLUSTER_NAME}-serverlb"
+write_outputs "$CLUSTER_NAME" "$(lab_kubeconfig_file "$CLUSTER_NAME")" "k3d-$CLUSTER_NAME"

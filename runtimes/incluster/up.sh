@@ -5,6 +5,15 @@ set -euo pipefail
 # target cluster (team mode); there is no cluster to create. kubectl
 # and helm use the in-cluster ServiceAccount config automatically.
 
+# shellcheck source=../_lib/docker.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/docker.sh"
+# shellcheck source=../_lib/kubeconfig.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/kubeconfig.sh"
+# shellcheck source=../_lib/outputs.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/outputs.sh"
+
+CLUSTER_NAME="${1:-${CLUSTER_NAME:-snowops}}"
+
 echo "In-cluster runtime: using the hosting cluster via the ServiceAccount token."
 
 if ! kubectl cluster-info >/dev/null 2>&1; then
@@ -15,4 +24,6 @@ if ! kubectl cluster-info >/dev/null 2>&1; then
 fi
 
 kubectl version -o yaml 2>/dev/null | grep -i "gitVersion" | head -2 || true
+# There is no kubeconfig or context to record: the ServiceAccount is the access.
+DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-cluster.local}" write_outputs "$CLUSTER_NAME" "" ""
 echo "In-cluster runtime ready."

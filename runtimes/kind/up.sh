@@ -32,6 +32,8 @@ done
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/docker.sh"
 # shellcheck source=../_lib/kubeconfig.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/kubeconfig.sh"
+# shellcheck source=../_lib/outputs.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/outputs.sh"
 
 ensure_docker_running || exit 1
 
@@ -76,6 +78,7 @@ if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
   done
   echo "Cluster '$CLUSTER_NAME' is healthy; skipping creation."
   record_ingress_ports "$CLUSTER_NAME" "${CLUSTER_NAME}-control-plane"
+  write_outputs "$CLUSTER_NAME" "$(lab_kubeconfig_file "$CLUSTER_NAME")" "kind-$CLUSTER_NAME"
   exit 0
 fi
 
@@ -143,6 +146,7 @@ with_user_kubeconfig kind create cluster --name "$CLUSTER_NAME" --config "$confi
 refresh_kubeconfigs || exit 1
 kubectl config use-context "kind-$CLUSTER_NAME"
 record_ingress_ports "$CLUSTER_NAME" "${CLUSTER_NAME}-control-plane"
+write_outputs "$CLUSTER_NAME" "$(lab_kubeconfig_file "$CLUSTER_NAME")" "kind-$CLUSTER_NAME"
 
 echo ""
 echo "kind cluster '$CLUSTER_NAME' is ready."

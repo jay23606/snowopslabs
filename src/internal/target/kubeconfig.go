@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package target describes what a lab runs against. The lab's Kubernetes
-// cluster has its own kubeconfig in the lab's state directory, and every run
-// uses it instead of the kubectl context the user happens to have selected.
 package target
 
 import (
@@ -29,6 +26,20 @@ const (
 	ProviderKind      = "kind"
 	ProviderIncluster = "incluster"
 )
+
+// UserKubeconfigEnv holds the KUBECONFIG the user started labctl with, so the
+// runtime scripts can still merge the lab's context into the user's own
+// kubeconfig once KUBECONFIG itself points at the lab.
+const UserKubeconfigEnv = "SNOWOPS_USER_KUBECONFIG"
+
+// UserKubeconfig is the KUBECONFIG the user started labctl with: the one
+// recorded before labctl pointed KUBECONFIG at the lab, else the current one.
+func UserKubeconfig() string {
+	if v, ok := os.LookupEnv(UserKubeconfigEnv); ok {
+		return v
+	}
+	return os.Getenv("KUBECONFIG")
+}
 
 // kubectlTimeout bounds each kubectl call made here; none of them needs the
 // cluster to answer.
@@ -118,15 +129,19 @@ func UserContext(ctx context.Context, runner toolchain.Runner, userKubeconfig st
 	ctx, cancel := context.WithTimeout(ctx, kubectlTimeout)
 	defer cancel()
 
-	cmd := toolchain.Command{Path: kubectl, Args: []string{"config", "current-context"}}
-	if userKubeconfig != "" {
-		cmd.Env = map[string]string{"KUBECONFIG": userKubeconfig}
-	} else {
+	// Without a user kubeconfig the default one is named outright: the
+	// process's own KUBECONFIG may by now be the lab's.
+	if userKubeconfig == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("locating the default kubeconfig: %w", err)
 		}
-		cmd.Args = append([]string{"--kubeconfig", filepath.Join(home, ".kube", "config")}, cmd.Args...)
+		userKubeconfig = filepath.Join(home, ".kube", "config")
+	}
+	cmd := toolchain.Command{
+		Path: kubectl,
+		Args: []string{"config", "current-context"},
+		Env:  map[string]string{"KUBECONFIG": userKubeconfig},
 	}
 	var out bytes.Buffer
 	cmd.Stdout = &out

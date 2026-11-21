@@ -1,0 +1,70 @@
+# Runtimes
+
+A runtime profile is a directory here that brings up one **target provider**.
+A lab is a set of named targets, and the Kubernetes cluster is the default one,
+named `k8s`. `k3d`, `kind` and `incluster` are the providers of `k8s`. Later
+targets (a Git forge, a state store) follow the same contract, which is what
+lets labctl treat them alike. See
+[ADR-0017](../docs/adr/0017-tracks-and-targets.md) for why, and
+[runtime profiles](../docs/runtime-profiles.md) for how to choose and write one.
+
+## The provider contract
+
+A provider directory `runtimes/<name>/` holds:
+
+| File | Contract |
+|---|---|
+| `up.sh` | Bring the target up. Idempotent: if it already exists, make sure it is healthy and exit 0. Writes `outputs.env` last, once the target is ready. |
+| `down.sh` | Remove the target and its outputs. Idempotent: exit 0 when it is already gone. |
+| `status.sh` | Report whether the target is ready. Exit 0 when it is. Otherwise exit non-zero with one line on stderr that says why. Never changes anything and returns within a few seconds. |
+| `runtime.env` | Defaults for the provider, as `KEY=value` lines. |
+
+Each script takes the lab's cluster name as its first argument and reads the
+rest of its settings from the environment. labctl passes:
+
+| Variable | Meaning |
+|---|---|
+| `CLUSTER_NAME` | The lab's name. |
+| `LAB_STATE_DIR` | `~/.snowops/state/<cluster>`, where the lab's state lives. |
+| `SNOWOPS_LAB_KUBECONFIG` | The lab's own kubeconfig, inside `LAB_STATE_DIR`. Not set for `incluster`. |
+| `SNOWOPS_USER_KUBECONFIG` | The kubeconfig the user started labctl with, kept for merging the lab's context into it. |
+
+By hand, none of these are set, so the scripts derive the state directory from
+`SNOWOPS_HOME` and the cluster name.
+
+## The outputs file
+
+`up.sh` writes `$LAB_STATE_DIR/outputs.env`. It is the only way later steps
+learn what the provider produced, so nothing reads a guess instead.
+
+| Key | Meaning | Required |
+|---|---|---|
+| `KUBECONFIG` | Path of the kubeconfig that reaches the cluster. It holds one context. | every provider but `incluster` |
+| `KUBE_CONTEXT` | That context's name. | every provider but `incluster` |
+| `HTTP_PORT`, `HTTPS_PORT` | The host ports of the cluster's ingress. | no |
+| `DOMAIN_SUFFIX` | The suffix of the cluster's ingress hostnames. | no |
+
+The ports and suffix are not a second source of truth. They come from the
+cluster record in `~/.snowops/clusters/<cluster>.env` that `_lib/docker.sh`
+keeps, and `outputs.env` is rewritten whenever that record changes
+(`move-ingress.sh`, `_lib/move-domain.sh`). `internal/target` reads and
+validates the file: a missing required key, or a port that is not a number,
+is an error that says to run `labctl init` again.
+
+## Helpers
+
+`_lib/` holds what providers share. They are sourced, never run.
+
+| File | Holds |
+|---|---|
+| `docker.sh` | The Docker engine and the cluster record. |
+| `kubeconfig.sh` | Writing the lab's kubeconfig, and running a command against the user's own. |
+| `outputs.sh` | Writing, refreshing and removing `outputs.env`. |
+| `move-domain.sh` | Moving a lab's hostnames to another domain suffix. |
+
+## Tests
+
+`src/test/shell/runtime_target_provider.bats` runs each provider's `status.sh`
+ready and not ready, and checks that each `up.sh` writes `outputs.env`.
+`runtime_kubeconfig.bats` covers the lab's kubeconfig, and
+`runtime_lifecycle.bats` the idempotency of `up.sh` and `down.sh`.

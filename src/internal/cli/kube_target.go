@@ -15,11 +15,6 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/toolchain"
 )
 
-// userKubeconfigEnv holds the KUBECONFIG the user started labctl with, so the
-// runtime scripts can still merge the lab's context into the user's own
-// kubeconfig once KUBECONFIG itself points at the lab.
-const userKubeconfigEnv = "SNOWOPS_USER_KUBECONFIG"
-
 // useLabCluster points this process, and so every child it starts (run engine,
 // web UI executor, check scripts and Go's own kubectl calls), at the lab's own
 // kubeconfig instead of the user's current kubectl context. It first creates
@@ -30,9 +25,9 @@ func useLabCluster(ctx context.Context, cmd *cobra.Command, runner toolchain.Run
 	if lab.Kubeconfig == "" {
 		return nil
 	}
-	user := userKubeconfig()
-	if err := os.Setenv(userKubeconfigEnv, user); err != nil {
-		return fmt.Errorf("setting %s: %w", userKubeconfigEnv, err)
+	user := target.UserKubeconfig()
+	if err := os.Setenv(target.UserKubeconfigEnv, user); err != nil {
+		return fmt.Errorf("setting %s: %w", target.UserKubeconfigEnv, err)
 	}
 	if user == lab.Kubeconfig {
 		user = ""
@@ -46,15 +41,6 @@ func useLabCluster(ctx context.Context, cmd *cobra.Command, runner toolchain.Run
 	return nil
 }
 
-// userKubeconfig is the KUBECONFIG the user started labctl with: the one
-// recorded before labctl pointed KUBECONFIG at the lab, else the current one.
-func userKubeconfig() string {
-	if v, ok := os.LookupEnv(userKubeconfigEnv); ok {
-		return v
-	}
-	return os.Getenv("KUBECONFIG")
-}
-
 // expectsNoCluster reports whether cmd builds, rebuilds or reports on the lab's
 // cluster, so a missing kubectl context is no surprise when it starts.
 func expectsNoCluster(cmd *cobra.Command) bool {
@@ -66,6 +52,17 @@ func expectsNoCluster(cmd *cobra.Command) bool {
 		return p != nil && (p.Name() == "lab" || p.Name() == "runtime")
 	}
 	return false
+}
+
+// labTarget is the lab the CLI is running, for the target package.
+func labTarget() target.Lab {
+	return target.Lab{
+		Root:     cfg.ProjectRoot,
+		Cluster:  cfg.ClusterName,
+		StateDir: cfg.StateDir,
+		Runner:   toolchain.NewExec(),
+		Registry: target.NewRegistry(target.DiscoverProviders(cfg.ProjectRoot)),
+	}
 }
 
 // printTarget says which cluster the lab runs against and, when the user's
@@ -88,7 +85,7 @@ func currentContextNote(ctx context.Context, runner toolchain.Runner, lab *confi
 	if lab.KubeContext == "" {
 		return ""
 	}
-	current, err := target.UserContext(ctx, runner, userKubeconfig())
+	current, err := target.UserContext(ctx, runner, target.UserKubeconfig())
 	if err != nil || current == "" || current == lab.KubeContext {
 		return ""
 	}
