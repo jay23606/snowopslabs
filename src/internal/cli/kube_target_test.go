@@ -339,7 +339,7 @@ func TestPrintTarget(t *testing.T) {
 
 	var out bytes.Buffer
 	printTarget(t.Context(), &out, toolchain.NewFake().WhenArgsContain("current-context", "colleague-staging\n", 0), lab)
-	for _, want := range []string{"Target:   k8s (kind), context kind-lab", "Note:", `"colleague-staging"`} {
+	for _, want := range []string{"Lab:      kind cluster, context kind-lab", "Note:", `"colleague-staging"`} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output %q does not contain %q", out.String(), want)
 		}
@@ -347,8 +347,15 @@ func TestPrintTarget(t *testing.T) {
 
 	out.Reset()
 	printTarget(t.Context(), &out, toolchain.NewFake().WhenArgsContain("current-context", "kind-lab\n", 0), lab)
-	if strings.Contains(out.String(), "Note:") || !strings.Contains(out.String(), "Target:") {
-		t.Errorf("output %q should name the target and nothing else", out.String())
+	if strings.Contains(out.String(), "Note:") || !strings.Contains(out.String(), "Lab:") {
+		t.Errorf("output %q should name the lab and nothing else", out.String())
+	}
+
+	out.Reset()
+	withFile := &config.Config{Profile: "k3d", KubeContext: "k3d-lab", Kubeconfig: "/tmp/lab/kubeconfig"}
+	printTarget(t.Context(), &out, toolchain.NewFake().WhenArgsContain("current-context", "k3d-lab\n", 0), withFile)
+	if !strings.Contains(out.String(), "Lab:      k3d cluster, kubeconfig /tmp/lab/kubeconfig") {
+		t.Errorf("output %q should name the lab's kubeconfig file", out.String())
 	}
 
 	out.Reset()

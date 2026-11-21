@@ -68,9 +68,11 @@ note says when `fs.inotify.max_user_instances` is back below 512 after a Docker
 VM restart; the next lab, platform, scenario, incident or traffic command
 raises it.
 
-`doctor` also prints a `Target:` line naming the cluster context the lab runs
-against, with a note when your current kubectl context is another one. labctl
-runs only against the lab, so the note explains plain `kubectl`, not labctl.
+`status` and `doctor` also print a `Lab:` line naming the runtime and the
+kubeconfig labctl uses for the lab (`export KUBECONFIG=<that path>` points
+plain `kubectl` at it too), with a note when your current kubectl context is
+another one. labctl runs only against the lab, so the note explains plain
+`kubectl`, not labctl.
 
 On WSL2, `doctor` adds a dedicated **WSL notes** section. It checks whether the
 lab directory is on a Windows mount (any path under `/mnt/`) where 9p bridge

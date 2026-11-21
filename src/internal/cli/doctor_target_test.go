@@ -41,12 +41,12 @@ func TestRunDoctor_NamesTheLabTarget(t *testing.T) {
 		{
 			name:    "another cluster is selected",
 			current: "colleague-staging",
-			want:    []string{"Target:   k8s (k3d), context k3d-clitest", `"colleague-staging"`, "kubectl config use-context k3d-clitest"},
+			want:    []string{"Lab:      k3d cluster, ", `"colleague-staging"`, "kubectl config use-context k3d-clitest"},
 		},
 		{
 			name:    "the lab's context is selected",
 			current: "k3d-clitest",
-			want:    []string{"Target:   k8s (k3d), context k3d-clitest"},
+			want:    []string{"Lab:      k3d cluster, "},
 			absent:  []string{"Note:"},
 		},
 	}
