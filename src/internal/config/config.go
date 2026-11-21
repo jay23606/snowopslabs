@@ -208,22 +208,45 @@ func Load(projectRoot string) (*Config, error) {
 	for k := range fileVals {
 		cfg.ScriptEnv[k] = resolveEnv(fileVals, k, fileVals[k])
 	}
-	// Every child process reaches the lab's cluster through its own kubeconfig.
-	maps.Copy(cfg.ScriptEnv, cfg.K8sOutputs().KubeEnv())
+	// Every child process reaches the lab's cluster through its own kubeconfig,
+	// the one its provider recorded when it has recorded one.
+	out := cfg.K8sOutputs()
+	cfg.Kubeconfig, cfg.KubeContext = out.Kubeconfig, out.KubeContext
+	maps.Copy(cfg.ScriptEnv, out.KubeEnv())
 
 	return cfg, nil
 }
 
 // K8sOutputs is what the lab's Kubernetes target provides to a run. Every run
-// that uses the default target gets its environment from here.
+// that uses the default target gets its environment from here. The outputs.env
+// its provider wrote are the source; a lab without a valid file yet, or whose
+// file came from another runtime profile, gets the values computed from the
+// configuration.
 func (c *Config) K8sOutputs() target.Outputs {
-	return target.Outputs{
+	out := target.Outputs{
+		Profile:      c.Profile,
 		Kubeconfig:   c.Kubeconfig,
 		KubeContext:  c.KubeContext,
 		HTTPPort:     c.HTTPPort,
 		HTTPSPort:    c.HTTPSPort,
 		DomainSuffix: c.DomainSuffix,
 	}
+	if c.StateDir == "" {
+		return out
+	}
+	rec, err := target.LoadOutputs(filepath.Join(c.StateDir, target.OutputsFile), c.Profile)
+	if err != nil || (rec.Profile != "" && rec.Profile != c.Profile) {
+		return out
+	}
+	for dst, v := range map[*string]string{
+		&out.Kubeconfig: rec.Kubeconfig, &out.KubeContext: rec.KubeContext,
+		&out.HTTPPort: rec.HTTPPort, &out.HTTPSPort: rec.HTTPSPort, &out.DomainSuffix: rec.DomainSuffix,
+	} {
+		if v != "" {
+			*dst = v
+		}
+	}
+	return out
 }
 
 // TargetOutputs returns the outputs of the named target, k8s when name is

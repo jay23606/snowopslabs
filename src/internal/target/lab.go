@@ -18,7 +18,7 @@ import (
 
 // statusTimeout bounds one status.sh run. A status check that takes longer is
 // broken, and callers poll it.
-const statusTimeout = 20 * time.Second
+var statusTimeout = 20 * time.Second
 
 // maxReasonRunes keeps a provider's reason to one line a person can read.
 const maxReasonRunes = 300
@@ -92,7 +92,8 @@ func (l Lab) Status(ctx context.Context, targetName, provider string) (Status, e
 		return Status{}, fmt.Errorf("finding bash to run %s: %w", script, err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, statusTimeout)
+	parent := ctx
+	ctx, cancel := context.WithTimeout(parent, statusTimeout)
 	defer cancel()
 	cmd := toolchain.Command{
 		Path: bash,
@@ -106,6 +107,11 @@ func (l Lab) Status(ctx context.Context, targetName, provider string) (Status, e
 		var exit *toolchain.ExitError
 		if errors.As(err, &exit) {
 			return Status{Reason: reason(stderr.String(), exit.ExitCode)}, nil
+		}
+		// The check's own deadline, not the caller's, is a target that did not
+		// answer; the caller giving up stays an error.
+		if parent.Err() == nil && (ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded)) {
+			return Status{Reason: fmt.Sprintf("status check did not answer within %s; is Docker busy?", statusTimeout)}, nil
 		}
 		return Status{}, fmt.Errorf("running %s: %w", path.Join("runtimes", provider, StatusScript), err)
 	}
@@ -186,6 +192,9 @@ func (l Lab) Require(ctx context.Context, names []string) error {
 
 // upAdvice is the command that brings a target up.
 func upAdvice(name, provider string) string {
+	if name == DefaultName && provider == ProviderIncluster {
+		return "Check that the hosting cluster's API server is up and that this pod's ServiceAccount may reach it"
+	}
 	if name == DefaultName {
 		return "Check the lab with: labctl status\nBring it up with:   labctl init"
 	}

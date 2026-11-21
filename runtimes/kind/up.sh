@@ -54,13 +54,16 @@ refresh_kubeconfigs() {
   write_lab_kubeconfig "$CLUSTER_NAME" kind get kubeconfig --name "$CLUSTER_NAME"
 }
 
+# kind_reachable writes the kubeconfig again on each try, because kind can only
+# print it once the control-plane container runs and its published API port can
+# change when the container restarts. It succeeds once the API answers.
 kind_reachable() {
-  kubectl config use-context "kind-$CLUSTER_NAME" >/dev/null 2>&1 &&
+  refresh_kubeconfigs 2>/dev/null &&
+    kubectl config use-context "kind-$CLUSTER_NAME" >/dev/null 2>&1 &&
     kubectl --request-timeout=20s get --raw=/healthz >/dev/null 2>&1
 }
 if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
   echo "Cluster '$CLUSTER_NAME' already exists - checking it is healthy."
-  refresh_kubeconfigs || true
   # A stopped Docker VM stops the node containers; start them again.
   for node in $(docker ps -a --filter "label=io.x-k8s.kind.cluster=${CLUSTER_NAME}" --format '{{.Names}}' 2>/dev/null); do
     docker start "$node" >/dev/null 2>&1 || true
@@ -78,7 +81,7 @@ if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
   done
   echo "Cluster '$CLUSTER_NAME' is healthy; skipping creation."
   record_ingress_ports "$CLUSTER_NAME" "${CLUSTER_NAME}-control-plane"
-  write_outputs "$CLUSTER_NAME" "$(lab_kubeconfig_file "$CLUSTER_NAME")" "kind-$CLUSTER_NAME"
+  write_outputs "$CLUSTER_NAME" kind "$(lab_kubeconfig_file "$CLUSTER_NAME")" "kind-$CLUSTER_NAME"
   exit 0
 fi
 
@@ -146,7 +149,7 @@ with_user_kubeconfig kind create cluster --name "$CLUSTER_NAME" --config "$confi
 refresh_kubeconfigs || exit 1
 kubectl config use-context "kind-$CLUSTER_NAME"
 record_ingress_ports "$CLUSTER_NAME" "${CLUSTER_NAME}-control-plane"
-write_outputs "$CLUSTER_NAME" "$(lab_kubeconfig_file "$CLUSTER_NAME")" "kind-$CLUSTER_NAME"
+write_outputs "$CLUSTER_NAME" kind "$(lab_kubeconfig_file "$CLUSTER_NAME")" "kind-$CLUSTER_NAME"
 
 echo ""
 echo "kind cluster '$CLUSTER_NAME' is ready."

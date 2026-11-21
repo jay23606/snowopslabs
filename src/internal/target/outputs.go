@@ -18,6 +18,7 @@ const OutputsFile = "outputs.env"
 
 // Keys of the outputs file.
 const (
+	KeyProfile      = "PROFILE"
 	KeyKubeconfig   = "KUBECONFIG"
 	KeyKubeContext  = "KUBE_CONTEXT"
 	KeyHTTPPort     = "HTTP_PORT"
@@ -31,6 +32,9 @@ const EnvLabKubeconfig = "SNOWOPS_LAB_KUBECONFIG"
 
 // Outputs is what a provider's up.sh recorded about the target it brought up.
 type Outputs struct {
+	// Profile is the runtime profile that wrote the file. Empty in a file
+	// that predates the key.
+	Profile string
 	// Kubeconfig is the path of the file that reaches the cluster. Empty for
 	// incluster, which uses the pod's ServiceAccount.
 	Kubeconfig string
@@ -77,6 +81,7 @@ func LoadOutputs(path, provider string) (Outputs, error) {
 	}
 
 	out := Outputs{
+		Profile:      vals[KeyProfile],
 		Kubeconfig:   vals[KeyKubeconfig],
 		KubeContext:  vals[KeyKubeContext],
 		HTTPPort:     vals[KeyHTTPPort],

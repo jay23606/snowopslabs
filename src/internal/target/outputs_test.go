@@ -29,6 +29,12 @@ func TestLoadOutputs(t *testing.T) {
 			},
 		},
 		{
+			name:     "the profile that wrote the file is read",
+			provider: ProviderKind,
+			content:  "PROFILE=kind\nKUBECONFIG=/k\nKUBE_CONTEXT=kind-lab\n",
+			want:     Outputs{Profile: "kind", Kubeconfig: "/k", KubeContext: "kind-lab"},
+		},
+		{
 			name:     "comments, blank lines and spaces are ignored",
 			provider: ProviderKind,
 			content:  "# written by up.sh\n\n  KUBECONFIG = /k  \nKUBE_CONTEXT=kind-lab\n",

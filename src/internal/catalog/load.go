@@ -153,6 +153,7 @@ func (c *Catalog) loadPath(dirName, file string, doc *yaml.Node) {
 	for _, msg := range p.Validate() {
 		c.problems = append(c.problems, Problem{Kind: KindPath, Name: nameOr(p.Name, dirName), File: file, Line: problemLine(doc, msg), Message: msg})
 	}
+	c.checkPathTargets(nameOr(p.Name, dirName), file, doc, &p)
 	c.index(KindPath, dirName, file, doc, func() { c.paths[dirName] = &p })
 }
 
@@ -227,6 +228,24 @@ func (c *Catalog) checkRequires(kind Kind, name, file string, doc *yaml.Node, ne
 				Message: fmt.Sprintf("requires: unknown target %q (use %s)", t, strings.Join(known.Names(), ", ")),
 			})
 		}
+	}
+}
+
+// checkPathTargets reports a module check whose target is not a known target,
+// or is not the default one: a path has no requires, so only k8s is available
+// to its checks.
+func (c *Catalog) checkPathTargets(name, file string, doc *yaml.Node, p *learn.Path) {
+	known := target.NewRegistry(nil)
+	for i, m := range p.Modules {
+		t := strings.TrimSpace(m.Check.Target)
+		if t == "" || t == target.DefaultName {
+			continue
+		}
+		msg := fmt.Sprintf("modules[%d]: check target %q is not available: a learning path has no requires and uses %s", i, t, target.DefaultName)
+		if _, err := known.Lookup(t); err != nil {
+			msg = fmt.Sprintf("modules[%d]: check target %q is unknown (use %s)", i, t, strings.Join(known.Names(), ", "))
+		}
+		c.problems = append(c.problems, Problem{Kind: KindPath, Name: name, File: file, Line: lineOfValue(doc, t), Message: msg})
 	}
 }
 

@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 
@@ -27,19 +30,35 @@ func useLabCluster(ctx context.Context, cmd *cobra.Command, runner toolchain.Run
 		return nil
 	}
 	user := target.UserKubeconfig()
+	// A KUBECONFIG that already is the lab's file is not the user's own: the
+	// runtime scripts merge into and clean up kubectl's default file instead.
+	if sameFile(user, lab.Kubeconfig) {
+		user = ""
+	}
 	if err := os.Setenv(target.UserKubeconfigEnv, user); err != nil {
 		return fmt.Errorf("setting %s: %w", target.UserKubeconfigEnv, err)
 	}
-	if user == lab.Kubeconfig {
-		user = ""
-	}
-	if err := target.EnsureKubeconfig(ctx, runner, lab.Kubeconfig, lab.KubeContext, user); err != nil && !expectsNoCluster(cmd) {
+	if err := target.EnsureKubeconfig(ctx, runner, lab.Profile, lab.Kubeconfig, lab.KubeContext, user); err != nil && !expectsNoCluster(cmd) {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %v\n", err)
 	}
 	if err := os.Setenv("KUBECONFIG", lab.Kubeconfig); err != nil {
 		return fmt.Errorf("setting KUBECONFIG to the lab's kubeconfig: %w", err)
 	}
 	return nil
+}
+
+// sameFile reports whether a and b name the same file, following symlinks. An
+// empty name is no file.
+func sameFile(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	if filepath.Clean(a) == filepath.Clean(b) {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
 
 // expectsNoCluster reports whether cmd builds, rebuilds or reports on the lab's
@@ -68,11 +87,46 @@ func labTarget() target.Lab {
 	}
 }
 
+// preflight remembers the target lists a command already found ready, so the
+// engine that starts the content next does not run each status.sh again.
+var preflight = struct {
+	sync.Mutex
+	ready map[string]bool
+}{ready: map[string]bool{}}
+
+// targetsKey names a list of targets; no names is the default target.
+func targetsKey(names []string) string {
+	if len(names) == 0 {
+		return target.DefaultName
+	}
+	return strings.Join(names, ",")
+}
+
+// preflightTargets is what the commands call first, so nothing is installed
+// for content that cannot run. A list that passes is not checked again by the
+// engine that starts the content in the same command.
+func preflightTargets(ctx context.Context, names []string) error {
+	if err := labTarget().Require(ctx, names); err != nil {
+		return err
+	}
+	preflight.Lock()
+	defer preflight.Unlock()
+	preflight.ready[targetsKey(names)] = true
+	return nil
+}
+
 // requireTargets stops content from starting against a target that is not
-// ready. It is what the scenario and incident engines call before they begin,
-// and what the commands call first so nothing is installed for content that
-// cannot run.
+// ready. It is what the scenario and incident engines call before they begin.
+// A list the command's preflight already passed is let through once.
 func requireTargets(ctx context.Context, names []string) error {
+	preflight.Lock()
+	key := targetsKey(names)
+	passed := preflight.ready[key]
+	delete(preflight.ready, key)
+	preflight.Unlock()
+	if passed {
+		return nil
+	}
 	return labTarget().Require(ctx, names)
 }
 

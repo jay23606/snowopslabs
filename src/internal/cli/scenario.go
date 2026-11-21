@@ -143,7 +143,7 @@ var scenarioUpCmd = &cobra.Command{
 		if err := requireCluster(cmd.Context()); err != nil {
 			return err
 		}
-		if err := requireTargets(cmd.Context(), s.RequiredTargets()); err != nil {
+		if err := preflightTargets(cmd.Context(), s.RequiredTargets()); err != nil {
 			return fmt.Errorf("scenario %s cannot start: %w", name, err)
 		}
 		// Check the lab has room before installing any prerequisite for it.

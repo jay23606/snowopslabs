@@ -123,6 +123,9 @@ environment; for `k8s` that is `KUBECONFIG` (the lab's own) and the ingress
 ports and domain, as in
 [the runtime contract](../../runtimes/README.md#the-outputs-file).
 
+A learning path has no `requires`, so a module check may name no target but
+`k8s`; `labctl validate` reports any other name at its line.
+
 ## Components
 
 A component is one installable thing. Use **either** a top-level `components:`

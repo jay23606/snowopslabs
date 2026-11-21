@@ -150,7 +150,7 @@ a reproducible pick across a team.`,
 			return err
 		}
 
-		if err := requireTargets(cmd.Context(), f.RequiredTargets()); err != nil {
+		if err := preflightTargets(cmd.Context(), f.RequiredTargets()); err != nil {
 			return fmt.Errorf("incident %s cannot start: %w", f.Name, err)
 		}
 		if err := ensurePlatformPrereqs(cmd.Context(), os.Stdout, f.Prerequisites.Platform, injectDeployPrereqs); err != nil {

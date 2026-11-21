@@ -404,11 +404,11 @@ if k3d cluster list "$CLUSTER_NAME" &>/dev/null; then
   echo "Cluster '$CLUSTER_NAME' is healthy; skipping creation."
   raise_inotify_limits
   record_ingress_ports "$CLUSTER_NAME" "k3d-${CLUSTER_NAME}-serverlb"
-  write_outputs "$CLUSTER_NAME" "$(lab_kubeconfig_file "$CLUSTER_NAME")" "k3d-$CLUSTER_NAME"
+  write_outputs "$CLUSTER_NAME" k3d "$(lab_kubeconfig_file "$CLUSTER_NAME")" "k3d-$CLUSTER_NAME"
   exit 0
 fi
 
 create_cluster
 raise_inotify_limits
 record_ingress_ports "$CLUSTER_NAME" "k3d-${CLUSTER_NAME}-serverlb"
-write_outputs "$CLUSTER_NAME" "$(lab_kubeconfig_file "$CLUSTER_NAME")" "k3d-$CLUSTER_NAME"
+write_outputs "$CLUSTER_NAME" k3d "$(lab_kubeconfig_file "$CLUSTER_NAME")" "k3d-$CLUSTER_NAME"

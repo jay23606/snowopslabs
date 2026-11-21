@@ -37,6 +37,7 @@ esac
 func TestLabKubeconfig_ReachesEveryRunPath(t *testing.T) {
 	l := newTerminal(t)
 	t.Setenv("KUBECONFIG", "/home/me/.kube/config")
+	t.Setenv(target.UserKubeconfigEnv, "")
 	os.Unsetenv(target.UserKubeconfigEnv)
 	l.Stub(t, "kubectl", colleagueKubectl)
 	writeDrill(t, l)
@@ -108,6 +109,7 @@ func TestLabKubeconfig_MissingContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			l := newTerminal(t)
+			t.Setenv(target.UserKubeconfigEnv, "")
 			os.Unsetenv(target.UserKubeconfigEnv)
 			l.Stub(t, "kubectl", "#!/bin/sh\nexit 1\n")
 
@@ -204,6 +206,27 @@ func TestUseLabCluster(t *testing.T) {
 		}
 		if env := fake.Calls()[0].Env; len(env) != 0 {
 			t.Errorf("kubectl got env %v, want it to use its default kubeconfig", env)
+		}
+		if got, set := os.LookupEnv(target.UserKubeconfigEnv); !set || got != "" {
+			t.Errorf("%s = %q (set %v), want it empty so the runtime scripts use kubectl's default file", target.UserKubeconfigEnv, got, set)
+		}
+	})
+
+	t.Run("a KUBECONFIG that is a link to the lab's file is not the user's either", func(t *testing.T) {
+		lab := newLab(t)
+		if err := os.WriteFile(lab.Kubeconfig, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(t.TempDir(), "config")
+		if err := os.Symlink(lab.Kubeconfig, link); err != nil {
+			t.Fatal(err)
+		}
+		reset(t, link)
+		if err := useLabCluster(t.Context(), &cobra.Command{Use: "status"}, toolchain.NewFake(), lab); err != nil {
+			t.Fatalf("useLabCluster: %v", err)
+		}
+		if got := os.Getenv(target.UserKubeconfigEnv); got != "" {
+			t.Errorf("%s = %q, want it empty", target.UserKubeconfigEnv, got)
 		}
 	})
 

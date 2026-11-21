@@ -239,6 +239,30 @@ func TestLab_Status_Context(t *testing.T) {
 		}
 	})
 
+	t.Run("a status check that outlives its own deadline is not ready, with a reason", func(t *testing.T) {
+		old := statusTimeout
+		statusTimeout = 20 * time.Millisecond
+		t.Cleanup(func() { statusTimeout = old })
+		fake := toolchain.NewFake().WhenArgsContainBlock("status.sh", time.Minute)
+		lab := newStatusLab(t, fake)
+		got, err := lab.Status(t.Context(), DefaultName, ProviderK3d)
+		if err != nil {
+			t.Fatalf("Status: %v", err)
+		}
+		if got.Ready || !strings.Contains(got.Reason, "did not answer within 20ms") || !strings.Contains(got.Reason, "Docker") {
+			t.Errorf("Status = %+v, want not ready with a reason that names the wait and Docker", got)
+		}
+	})
+
+	t.Run("a deadline error from the runner is the same answer", func(t *testing.T) {
+		fake := toolchain.NewFake().WhenArgsContainError("status.sh", context.DeadlineExceeded)
+		lab := newStatusLab(t, fake)
+		got, err := lab.Status(t.Context(), DefaultName, ProviderK3d)
+		if err != nil || got.Ready || !strings.Contains(got.Reason, "did not answer within 20s") {
+			t.Errorf("Status = %+v, %v; want not ready with the timeout reason", got, err)
+		}
+	})
+
 	t.Run("a script that hangs is stopped by the deadline, not reported as not ready", func(t *testing.T) {
 		fake := toolchain.NewFake().WhenArgsContainBlock("status.sh", time.Minute)
 		lab := newStatusLab(t, fake)

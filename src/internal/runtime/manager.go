@@ -6,10 +6,14 @@
 package runtime
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +40,8 @@ type Manager struct {
 	status      func(ctx context.Context, runtime string) (target.Status, error)
 	outputs     func(runtime string) (target.Outputs, error)
 	userContext func(ctx context.Context) (string, error)
+	// contextExists is asked about a runtime that has no status.sh.
+	contextExists func(ctx context.Context, name string) (bool, error)
 }
 
 // NewManager scans the runtimes/ directory for available runtimes. A runtime's
@@ -61,6 +67,9 @@ func NewManager(projectRoot, clusterName string) *Manager {
 	m.outputs = lab.Outputs
 	m.userContext = func(ctx context.Context) (string, error) {
 		return target.UserContext(ctx, runner, target.UserKubeconfig())
+	}
+	m.contextExists = func(ctx context.Context, name string) (bool, error) {
+		return target.ContextExists(ctx, runner, target.UserKubeconfig(), name)
 	}
 	return m
 }
@@ -92,6 +101,9 @@ func (m *Manager) List() []RuntimeInfo {
 func (m *Manager) info(ctx context.Context, name, userCtx string) RuntimeInfo {
 	info := RuntimeInfo{Name: name}
 	st, err := m.status(ctx, name)
+	if errors.Is(err, target.ErrNoStatusScript) {
+		return m.infoFromContext(ctx, name, userCtx)
+	}
 	if err != nil || !st.Ready {
 		return info
 	}
@@ -102,6 +114,44 @@ func (m *Manager) info(ctx context.Context, name, userCtx string) RuntimeInfo {
 	}
 	info.Current = kubeContext != "" && kubeContext == userCtx
 	return info
+}
+
+// infoFromContext describes a runtime that has no status.sh, such as one a
+// user wrote: it is active when its kubeconfig context exists, and current when
+// that context is the selected one. The context is KUBECONFIG_CONTEXT in the
+// runtime's runtime.env, or the one k3d and kind name after the cluster.
+func (m *Manager) infoFromContext(ctx context.Context, name, userCtx string) RuntimeInfo {
+	info := RuntimeInfo{Name: name}
+	envFile := filepath.Join(m.ProjectRoot, "runtimes", name, "runtime.env")
+	kubeContext := target.ExpectedContext(name, m.ClusterName, readEnvKey(envFile, "KUBECONFIG_CONTEXT"))
+	if kubeContext == "" {
+		return info
+	}
+	if exists, err := m.contextExists(ctx, kubeContext); err != nil || !exists {
+		return info
+	}
+	info.Active = true
+	info.Current = kubeContext == userCtx
+	return info
+}
+
+// readEnvKey returns the value of key in a KEY=value env file, or "" when the
+// file cannot be read or has no such key.
+func readEnvKey(path, key string) string {
+	f, err := os.Open(path) //nolint:gosec // path is a runtime's own runtime.env
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if after, ok := strings.CutPrefix(line, key+"="); ok {
+			return strings.TrimSpace(after)
+		}
+	}
+	return ""
 }
 
 // Names returns the names of all discovered runtimes.

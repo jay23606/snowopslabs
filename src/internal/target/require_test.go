@@ -3,6 +3,7 @@
 package target
 
 import (
+	"context"
 	"maps"
 	"os"
 	"path/filepath"
@@ -130,9 +131,31 @@ func TestLab_Require(t *testing.T) {
 	}
 }
 
+func TestLab_Require_AProviderThatTimesOutSaysSo(t *testing.T) {
+	fake := toolchain.NewFake().WhenArgsContainError("status.sh", context.DeadlineExceeded)
+	lab := newStatusLab(t, fake)
+	lab.Providers = map[string]string{DefaultName: ProviderK3d}
+	err := lab.Require(t.Context(), []string{DefaultName})
+	if err == nil {
+		t.Fatal("Require succeeded")
+	}
+	for _, w := range []string{"target k8s is not ready", "did not answer within 20s", "Docker"} {
+		if !strings.Contains(err.Error(), w) {
+			t.Errorf("error %q does not contain %q", err, w)
+		}
+	}
+	if strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Errorf("error %q shows a raw context error", err)
+	}
+}
+
 func TestUpAdvice(t *testing.T) {
 	if got := upAdvice(DefaultName, ProviderK3d); !strings.Contains(got, "labctl init") {
 		t.Errorf("k8s advice = %q, want labctl init", got)
+	}
+	got := upAdvice(DefaultName, ProviderIncluster)
+	if strings.Contains(got, "labctl init") || !strings.Contains(got, "ServiceAccount") || !strings.Contains(got, "API server") {
+		t.Errorf("incluster advice = %q, want the API server and ServiceAccount, not labctl init", got)
 	}
 	if got := upAdvice("git-forge", "gitea"); !strings.Contains(got, "runtimes/gitea/up.sh") {
 		t.Errorf("other advice = %q, want the provider's up.sh", got)

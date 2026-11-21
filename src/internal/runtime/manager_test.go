@@ -220,16 +220,100 @@ func TestList_RunsEachRuntimesStatusScript(t *testing.T) {
 	}
 }
 
-func TestList_AProviderWithoutStatusScriptIsNotActive(t *testing.T) {
+// A runtime without a status.sh, such as one a user wrote, is judged by its
+// kubeconfig context as it was before status scripts: KUBECONFIG_CONTEXT in its
+// runtime.env, or the name k3d and kind give.
+func TestList_ARuntimeWithoutStatusScriptIsJudgedByItsContext(t *testing.T) {
+	noScript := listing{err: target.ErrNoStatusScript}
+	tests := []struct {
+		name        string
+		runtime     string
+		runtimeEnv  string
+		exists      map[string]bool
+		userContext string
+		wantActive  bool
+		wantCurrent bool
+	}{
+		{
+			name: "its context exists and is the selected one", runtime: "cloud",
+			runtimeEnv: "# the cluster\nKUBECONFIG_CONTEXT=prod-eu\n", exists: map[string]bool{"prod-eu": true},
+			userContext: "prod-eu", wantActive: true, wantCurrent: true,
+		},
+		{
+			name: "its context exists and another one is selected", runtime: "cloud",
+			runtimeEnv: "KUBECONFIG_CONTEXT=prod-eu\n", exists: map[string]bool{"prod-eu": true},
+			userContext: "colleague-staging", wantActive: true,
+		},
+		{
+			name: "its context is not in the kubeconfig", runtime: "cloud",
+			runtimeEnv: "KUBECONFIG_CONTEXT=prod-eu\n", userContext: "prod-eu",
+		},
+		{
+			name: "no context is named anywhere", runtime: "cloud",
+			runtimeEnv: "REGISTRY_TYPE=none\n", exists: map[string]bool{"": true}, userContext: "anything",
+		},
+		{
+			name: "k3d without a status.sh uses the context named after the cluster", runtime: "k3d",
+			exists: map[string]bool{"k3d-lab": true}, userContext: "k3d-lab", wantActive: true, wantCurrent: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rtDir := filepath.Join(t.TempDir(), "runtimes")
+			makeRuntime(t, rtDir, tt.runtime)
+			if tt.runtimeEnv != "" {
+				if err := os.WriteFile(filepath.Join(rtDir, tt.runtime, "runtime.env"), []byte(tt.runtimeEnv), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			m := newTestManager(t, rtDir, "lab", tt.userContext, map[string]listing{tt.runtime: noScript})
+			m.contextExists = func(_ context.Context, name string) (bool, error) { return tt.exists[name], nil }
+
+			got := m.List()
+			if len(got) != 1 || got[0].Active != tt.wantActive || got[0].Current != tt.wantCurrent {
+				t.Errorf("List() = %+v, want active=%v current=%v", got, tt.wantActive, tt.wantCurrent)
+			}
+		})
+	}
+}
+
+func TestList_AContextThatCannotBeCheckedIsNotActive(t *testing.T) {
+	rtDir := filepath.Join(t.TempDir(), "runtimes")
+	makeRuntime(t, rtDir, "cloud")
+	if err := os.WriteFile(filepath.Join(rtDir, "cloud", "runtime.env"), []byte("KUBECONFIG_CONTEXT=prod-eu\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newTestManager(t, rtDir, "lab", "prod-eu", map[string]listing{"cloud": {err: target.ErrNoStatusScript}})
+	m.contextExists = func(context.Context, string) (bool, error) { return false, errors.New("no kubectl") }
+	if got := m.List(); len(got) != 1 || got[0].Active {
+		t.Errorf("List() = %+v, want it not active", got)
+	}
+}
+
+// The real wiring asks kubectl about the user's own kubeconfig.
+func TestList_ARuntimeWithoutStatusScriptAsksKubectl(t *testing.T) {
 	m, _, l, _ := fixtureManager(t)
-	l.Stub(t, "kubectl", "#!/bin/sh\necho k3d-lab\n")
-	if err := os.Remove(filepath.Join(l.Root, "runtimes", "k3d", "status.sh")); err != nil {
+	l.Write(t, "runtimes/cloud/up.sh", "#!/usr/bin/env bash\n")
+	l.Write(t, "runtimes/cloud/runtime.env", "KUBECONFIG_CONTEXT=prod-eu\n")
+	l.Stub(t, "kubectl", `#!/bin/sh
+case "$*" in
+  "config get-contexts prod-eu --no-headers") echo "* prod-eu" ;;
+  "config current-context") echo prod-eu ;;
+  *) exit 1 ;;
+esac
+`)
+	if err := os.Remove(filepath.Join(l.Root, "runtimes", "k3d", "status.sh")); err != nil && !errors.Is(err, os.ErrNotExist) {
 		t.Fatal(err)
 	}
 	m = NewManager(m.ProjectRoot, "lab")
-	got := m.List()
-	if len(got) != 1 || got[0].Active || got[0].Current {
-		t.Errorf("List() = %+v, want k3d neither active nor current without a status.sh", got)
+	var cloud RuntimeInfo
+	for _, info := range m.List() {
+		if info.Name == "cloud" {
+			cloud = info
+		}
+	}
+	if !cloud.Active || !cloud.Current {
+		t.Errorf("cloud = %+v, want active and current", cloud)
 	}
 }
 

@@ -43,7 +43,7 @@ func TestEnsureKubeconfig(t *testing.T) {
 			t.Fatal(err)
 		}
 		fake := toolchain.NewFake()
-		if err := EnsureKubeconfig(t.Context(), fake, path, kubeContext, ""); err != nil {
+		if err := EnsureKubeconfig(t.Context(), fake, ProviderK3d, path, kubeContext, ""); err != nil {
 			t.Fatalf("EnsureKubeconfig: %v", err)
 		}
 		if len(fake.Calls()) != 0 {
@@ -57,7 +57,7 @@ func TestEnsureKubeconfig(t *testing.T) {
 	t.Run("a lab from before the file existed gets it, private to the user", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "state", "lab", KubeconfigFile)
 		fake := toolchain.NewFake().WhenArgsContain(view, sampleKubeconfig, 0)
-		if err := EnsureKubeconfig(t.Context(), fake, path, kubeContext, "/home/me/.kube/config"); err != nil {
+		if err := EnsureKubeconfig(t.Context(), fake, ProviderK3d, path, kubeContext, "/home/me/.kube/config"); err != nil {
 			t.Fatalf("EnsureKubeconfig: %v", err)
 		}
 		got, err := os.ReadFile(path)
@@ -83,11 +83,52 @@ func TestEnsureKubeconfig(t *testing.T) {
 
 	t.Run("without a user kubeconfig kubectl reads its default one", func(t *testing.T) {
 		fake := toolchain.NewFake().WhenArgsContain(view, sampleKubeconfig, 0)
-		if err := EnsureKubeconfig(t.Context(), fake, filepath.Join(t.TempDir(), KubeconfigFile), kubeContext, ""); err != nil {
+		if err := EnsureKubeconfig(t.Context(), fake, ProviderK3d, filepath.Join(t.TempDir(), KubeconfigFile), kubeContext, ""); err != nil {
 			t.Fatalf("EnsureKubeconfig: %v", err)
 		}
 		if env := fake.Calls()[0].Env; len(env) != 0 {
 			t.Errorf("kubectl got env %v, want none", env)
+		}
+	})
+
+	t.Run("a custom profile's kubeconfig is cut again on every call", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), KubeconfigFile)
+		if err := os.WriteFile(path, []byte("stale credentials"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		fake := toolchain.NewFake().WhenArgsContain(view, sampleKubeconfig, 0)
+		if err := EnsureKubeconfig(t.Context(), fake, "cloud", path, kubeContext, ""); err != nil {
+			t.Fatalf("EnsureKubeconfig: %v", err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != sampleKubeconfig {
+			t.Errorf("kubeconfig = %q, want the user's current credentials", got)
+		}
+	})
+
+	t.Run("a custom profile keeps its file when the user's context is gone", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), KubeconfigFile)
+		if err := os.WriteFile(path, []byte("last good"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		fake := toolchain.NewFake().WhenArgsContain(view, "", 1)
+		if err := EnsureKubeconfig(t.Context(), fake, "cloud", path, kubeContext, ""); err != nil {
+			t.Fatalf("EnsureKubeconfig: %v", err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != "last good" {
+			t.Errorf("kubeconfig = %q, want the earlier file kept", got)
+		}
+	})
+
+	t.Run("a bind-all server address becomes the loopback address", func(t *testing.T) {
+		for _, provider := range []string{ProviderK3d, "cloud"} {
+			path := filepath.Join(t.TempDir(), KubeconfigFile)
+			fake := toolchain.NewFake().WhenArgsContain(view, "    server: https://0.0.0.0:6443\n", 0)
+			if err := EnsureKubeconfig(t.Context(), fake, provider, path, kubeContext, ""); err != nil {
+				t.Fatalf("%s: EnsureKubeconfig: %v", provider, err)
+			}
+			if got, _ := os.ReadFile(path); string(got) != "    server: https://127.0.0.1:6443\n" {
+				t.Errorf("%s: kubeconfig = %q, want 127.0.0.1", provider, got)
+			}
 		}
 	})
 
@@ -129,7 +170,7 @@ func TestEnsureKubeconfig(t *testing.T) {
 	for _, tt := range failures {
 		t.Run(tt.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), KubeconfigFile)
-			err := EnsureKubeconfig(t.Context(), tt.fake(), path, tt.kubeContext, "")
+			err := EnsureKubeconfig(t.Context(), tt.fake(), ProviderK3d, path, tt.kubeContext, "")
 			if err == nil {
 				t.Fatal("EnsureKubeconfig succeeded")
 			}
@@ -149,7 +190,7 @@ func TestEnsureKubeconfig(t *testing.T) {
 		cancel()
 		fake := toolchain.NewFake().WhenArgsContain(view, sampleKubeconfig, 0)
 		path := filepath.Join(t.TempDir(), KubeconfigFile)
-		if err := EnsureKubeconfig(ctx, fake, path, kubeContext, ""); err == nil {
+		if err := EnsureKubeconfig(ctx, fake, ProviderK3d, path, kubeContext, ""); err == nil {
 			t.Fatal("EnsureKubeconfig succeeded with a cancelled context")
 		}
 		if _, err := os.Stat(path); err == nil {
@@ -163,7 +204,7 @@ func TestEnsureKubeconfig(t *testing.T) {
 			t.Fatal(err)
 		}
 		fake := toolchain.NewFake().WhenArgsContain(view, sampleKubeconfig, 0)
-		err := EnsureKubeconfig(t.Context(), fake, filepath.Join(blocker, "state", KubeconfigFile), kubeContext, "")
+		err := EnsureKubeconfig(t.Context(), fake, ProviderK3d, filepath.Join(blocker, "state", KubeconfigFile), kubeContext, "")
 		if err == nil || !strings.Contains(err.Error(), "creating") {
 			t.Errorf("error = %v, want one that says the directory could not be created", err)
 		}
@@ -215,6 +256,44 @@ func TestUserContext(t *testing.T) {
 		fake.LookPathErr = errors.New("not found")
 		if _, err := UserContext(t.Context(), fake, "/x"); err == nil {
 			t.Error("UserContext succeeded without kubectl")
+		}
+	})
+}
+
+func TestContextExists(t *testing.T) {
+	const query = "config get-contexts prod-eu --no-headers"
+	t.Run("a context in the user's kubeconfig", func(t *testing.T) {
+		fake := toolchain.NewFake().WhenArgsContain(query, "* prod-eu\n", 0)
+		ok, err := ContextExists(t.Context(), fake, "/home/me/.kube/config", "prod-eu")
+		if err != nil || !ok {
+			t.Fatalf("ContextExists = %v, %v; want true", ok, err)
+		}
+		if env := fake.Calls()[0].Env["KUBECONFIG"]; env != "/home/me/.kube/config" {
+			t.Errorf("KUBECONFIG = %q, want the user's kubeconfig", env)
+		}
+	})
+	t.Run("a context kubectl does not know", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		fake := toolchain.NewFake().WhenArgsContain(query, "", 1)
+		ok, err := ContextExists(t.Context(), fake, "", "prod-eu")
+		if err != nil || ok {
+			t.Fatalf("ContextExists = %v, %v; want false and no error", ok, err)
+		}
+		if env := fake.Calls()[0].Env["KUBECONFIG"]; !strings.HasSuffix(env, filepath.Join(".kube", "config")) {
+			t.Errorf("KUBECONFIG = %q, want the default kubeconfig", env)
+		}
+	})
+	t.Run("a kubectl that cannot start is an error", func(t *testing.T) {
+		fake := toolchain.NewFake().WhenArgsContainError(query, errors.New("boom"))
+		if _, err := ContextExists(t.Context(), fake, "/x", "prod-eu"); err == nil {
+			t.Error("ContextExists succeeded though kubectl could not start")
+		}
+	})
+	t.Run("a machine without kubectl is an error", func(t *testing.T) {
+		fake := toolchain.NewFake()
+		fake.LookPathErr = errors.New("not found")
+		if _, err := ContextExists(t.Context(), fake, "/x", "prod-eu"); err == nil {
+			t.Error("ContextExists succeeded without kubectl")
 		}
 	})
 }

@@ -97,11 +97,18 @@ Scripts need no `--context` and do not change.
 - A lab created before the file existed gets it on the first labctl command,
   cut from the context labctl expects: `k3d-<cluster>`, `kind-<cluster>`, or
   `KUBECONFIG_CONTEXT` for another profile. If your kubeconfig has no such
-  context, labctl says to run `labctl init`.
+  context, labctl says to run `labctl init`. A profile of your own, whose
+  `up.sh` does not write the file, has it cut again from your kubeconfig on
+  every command, so rotated credentials reach the lab; a bind-all server
+  address (`0.0.0.0`) becomes `127.0.0.1`.
+- If your own `KUBECONFIG` is the lab's file, labctl does not treat it as
+  yours: the context is merged into and removed from `~/.kube/config`.
 - `labctl status` and `labctl doctor` name the context the lab targets and
   say when your current kubectl context is another one. Nothing changes your
   current context for you.
-- `down.sh` removes the file with the cluster.
+- `down.sh` removes the file with the cluster it deleted. The state directory is
+  per cluster, so a runtime whose cluster is not there leaves the state of
+  another runtime alone.
 
 ### What up records
 
@@ -109,6 +116,7 @@ Scripts need no `--context` and do not change.
 what the profile produced:
 
 ```
+PROFILE=k3d
 KUBECONFIG=/home/me/.snowops/state/snowops/kubeconfig
 KUBE_CONTEXT=k3d-snowops
 HTTP_PORT=80
@@ -121,9 +129,12 @@ cluster; `incluster` writes neither. The ports and suffix come from the cluster
 record described above, and `move-ingress.sh` and `move-domain.sh` rewrite the
 file when they change it. `internal/target` loads and validates it, and
 `runtime.Manager` combines it with `status.sh` instead of reading kubectl's
-current context. A lab from before this file existed has none until
-`labctl init` runs again; the runtime list then falls back to the context the
-profile is expected to create (`k3d-<cluster>`, `kind-<cluster>`).
+current context. Every run's `KUBECONFIG` comes from the file when it is valid.
+A lab from before this file existed has none until `labctl init` runs again;
+the runtime list and run environment then use the context the profile is
+expected to create (`k3d-<cluster>`, `kind-<cluster>`). A profile without a
+`status.sh` is listed as active when the context named by `KUBECONFIG_CONTEXT`
+in its `runtime.env` is in your kubeconfig, and current when it is selected.
 
 ### runtime.env keys
 

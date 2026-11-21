@@ -57,6 +57,7 @@ func TestRunDoctor_NamesTheLabTarget(t *testing.T) {
 			projectDir = l.Root
 			t.Cleanup(func() { projectDir = saved })
 			t.Setenv("KUBECONFIG", "/home/me/.kube/config")
+			t.Setenv(target.UserKubeconfigEnv, "")
 			os.Unsetenv(target.UserKubeconfigEnv)
 
 			var out bytes.Buffer

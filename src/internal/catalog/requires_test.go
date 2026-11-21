@@ -69,3 +69,42 @@ func TestLoad_ValidTargetsLoadClean(t *testing.T) {
 		t.Errorf("challenge with no requires needs %v, want the default [k8s]", got)
 	}
 }
+
+// A learning path cannot declare requires, so a module check may only name the
+// default target; any other name is reported at its own line.
+func TestLoad_PathCheckTargets(t *testing.T) {
+	cases := []struct {
+		name, target, want string
+	}{
+		{name: "the default target loads clean", target: "k8s"},
+		{name: "no target loads clean"},
+		{name: "an unknown target", target: "git-forge", want: `check target "git-forge" is unknown (use k8s)`},
+		{name: "a known target other than the default", target: "k8s-extra", want: `check target "k8s-extra" is unknown`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			body := validPath
+			if tc.target != "" {
+				body = strings.Replace(validPath, "      script: x.sh\n", "      script: x.sh\n      target: "+tc.target+"\n", 1)
+			}
+			write(t, root, "learn", "p1", "path.yaml", body)
+			write(t, root, "scenarios", "s1", "scenario.yaml", validScenario)
+			c, _ := Load(root)
+			if tc.want == "" {
+				if !c.IsValid() {
+					t.Fatalf("expected no problems, got %v", c.Problems())
+				}
+				return
+			}
+			p := findProblem(t, c.Problems(), tc.want)
+			lines := strings.Split(body, "\n")
+			if p.Line < 1 || lines[p.Line-1] != "      target: "+tc.target {
+				t.Errorf("line = %d, want the target line", p.Line)
+			}
+			if got := p.String(); !strings.Contains(got, "[path/p1] ") {
+				t.Errorf("problem renders as %q, want file:line: [kind/name] message", got)
+			}
+		})
+	}
+}

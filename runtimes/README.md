@@ -15,8 +15,8 @@ A provider directory `runtimes/<name>/` holds:
 | File | Contract |
 |---|---|
 | `up.sh` | Bring the target up. Idempotent: if it already exists, make sure it is healthy and exit 0. Writes `outputs.env` last, once the target is ready. |
-| `down.sh` | Remove the target and its outputs. Idempotent: exit 0 when it is already gone. |
-| `status.sh` | Report whether the target is ready. Exit 0 when it is. Otherwise exit non-zero with one line on stderr that says why. Never changes anything and returns within a few seconds. |
+| `down.sh` | Remove the target, and its outputs once it is gone. Idempotent: exit 0 when it is already gone. State that another provider wrote (the `PROFILE` in `outputs.env` names it) is left alone, because the state directory is per cluster and shared by providers. |
+| `status.sh` | Report whether the target is ready. Exit 0 when it is. Otherwise exit non-zero with one line on stderr that says why, naming Docker when the tool cannot list clusters instead of claiming the cluster is missing. Never changes anything and returns within a few seconds; labctl gives up after 20 seconds and reports that the check did not answer. |
 | `runtime.env` | Defaults for the provider, as `KEY=value` lines. |
 
 Each script takes the lab's cluster name as its first argument and reads the
@@ -39,6 +39,7 @@ learn what the provider produced, so nothing reads a guess instead.
 
 | Key | Meaning | Required |
 |---|---|---|
+| `PROFILE` | The provider that wrote the file. `down.sh` removes only state its own provider wrote. | written by every provider |
 | `KUBECONFIG` | Path of the kubeconfig that reaches the cluster. It holds one context. | every provider but `incluster` |
 | `KUBE_CONTEXT` | That context's name. | every provider but `incluster` |
 | `HTTP_PORT`, `HTTPS_PORT` | The host ports of the cluster's ingress. | no |
@@ -51,7 +52,13 @@ keeps, and `outputs.env` is rewritten whenever that record changes
 validates the file: a missing required key, or a port that is not a number,
 is an error that says to run `labctl init` again.
 
-A run that uses the target gets these values in its environment: `KUBECONFIG`
+`incluster` writes the file as a convenience: when its state directory is not
+writable, `up.sh` warns once and carries on, and `down.sh` removes the file it
+wrote.
+
+A run that uses the target gets these values in its environment, read from
+`outputs.env` when it is valid (a lab with none yet gets the values labctl
+computes from `.env`): `KUBECONFIG`
 and `SNOWOPS_LAB_KUBECONFIG` (the file above), `HTTP_PORT`, `HTTPS_PORT` and
 `DOMAIN_SUFFIX`. Content picks the target with `target:` and says it needs it
 with `requires:` ([Targets](../docs/reference/scenario-schema.md#targets-requires-and-target)).

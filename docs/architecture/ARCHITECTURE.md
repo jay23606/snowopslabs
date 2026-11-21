@@ -286,7 +286,9 @@ providers of `k8s`. A provider has `up.sh`, `down.sh` and `status.sh`, and its
 suffix) in `outputs.env` in the lab's state directory
 ([contract](../../runtimes/README.md)). Up and down run through the run engine
 under the `lab` lock key. `status.sh` is polled, so `internal/target` runs it
-through the toolchain runner with a timeout and no run record, and
+through the toolchain runner with a 20 second timeout (a check that outlives it
+is reported as not ready, not as an error) and no run record.
+A command that checks its targets before starting content does so once.
 `runtime.Manager` reports a runtime as active from its answer. An unknown
 target name is refused with the names the lab has.
 

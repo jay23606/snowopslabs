@@ -16,7 +16,12 @@ not_ready() {
 }
 
 command -v k3d >/dev/null 2>&1 || not_ready "k3d is not installed"
-k3d cluster list "$CLUSTER_NAME" >/dev/null 2>&1 || not_ready "k3d has no cluster named '$CLUSTER_NAME'; run 'labctl init'"
+# Listing every cluster separates a k3d or Docker failure from a missing cluster.
+if ! clusters="$(k3d cluster list --no-headers 2>&1)"; then
+  not_ready "k3d cannot list clusters (is Docker running?): $(printf '%s\n' "$clusters" | head -n 1)"
+fi
+printf '%s\n' "$clusters" | awk '{print $1}' | grep -qx "$CLUSTER_NAME" ||
+  not_ready "k3d has no cluster named '$CLUSTER_NAME'; run 'labctl init'"
 
 kubeconfig="$(lab_kubeconfig_file "$CLUSTER_NAME")"
 [ -s "$kubeconfig" ] || not_ready "the lab has no kubeconfig ($kubeconfig); run 'labctl init'"

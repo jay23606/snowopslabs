@@ -53,3 +53,29 @@ func TestContentStartsOnlyWhenTargetsAreReady(t *testing.T) {
 		})
 	}
 }
+
+// A start checks the lab's targets once: the command's own preflight, and not
+// the engine that starts the content after it, runs status.sh.
+func TestContentStartRunsStatusOnce(t *testing.T) {
+	const counting = "#!/usr/bin/env bash\necho run >>\"$LAB_STATE_DIR/status-runs\"\nexit 0\n"
+	for _, args := range [][]string{
+		{"scenario", "up", "drill"},
+		{"incident", "inject", labtest.Fault},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			l := newTerminal(t)
+			writeDrill(t, l)
+			l.Write(t, "runtimes/k3d/status.sh", counting)
+			if r := l.run(args...); r.err != nil {
+				t.Fatalf("labctl %s failed: %v\n%s%s", strings.Join(args, " "), r.err, r.stdout, r.stderr)
+			}
+			runs, err := os.ReadFile(filepath.Join(l.Home, "state", "clitest", "status-runs"))
+			if err != nil {
+				t.Fatalf("status.sh did not run: %v", err)
+			}
+			if got := strings.Count(string(runs), "run"); got != 1 {
+				t.Errorf("status.sh ran %d times, want once", got)
+			}
+		})
+	}
+}

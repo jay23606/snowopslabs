@@ -59,15 +59,32 @@ func ExpectedContext(provider, cluster, override string) string {
 	}
 }
 
-// EnsureKubeconfig makes sure the lab's kubeconfig exists at path. A lab
-// created before labctl wrote the file gets it here, cut from the user's
-// kubeconfig (userKubeconfig, or kubectl's default when empty) for
-// kubeContext. A context that is not in the user's kubeconfig is an error
-// that says to run labctl init.
-func EnsureKubeconfig(ctx context.Context, runner toolchain.Runner, path, kubeContext, userKubeconfig string) error {
+// EnsureKubeconfig makes sure the lab's kubeconfig exists at path. k3d and
+// kind write the file in up.sh, so an existing one is kept; a missing one, as
+// in a lab from before the file existed, is cut from the user's kubeconfig
+// (userKubeconfig, or kubectl's default when empty) for kubeContext. Any other
+// provider never writes it, so it is cut again on every call and rotated
+// credentials reach the lab; if that fails, a file already there stays. An
+// address of 0.0.0.0 becomes 127.0.0.1, as in up.sh. A context that is not in
+// the user's kubeconfig is an error that says to run labctl init.
+func EnsureKubeconfig(ctx context.Context, runner toolchain.Runner, provider, path, kubeContext, userKubeconfig string) error {
+	existing := false
 	if info, err := os.Stat(path); err == nil && info.Size() > 0 {
+		existing = true
+	}
+	if existing && (provider == ProviderK3d || provider == ProviderKind || provider == ProviderIncluster) {
 		return nil
 	}
+	err := cutKubeconfig(ctx, runner, path, kubeContext, userKubeconfig)
+	if err != nil && existing {
+		return nil
+	}
+	return err
+}
+
+// cutKubeconfig writes the one context kubeContext from the user's kubeconfig
+// to path.
+func cutKubeconfig(ctx context.Context, runner toolchain.Runner, path, kubeContext, userKubeconfig string) error {
 	if kubeContext == "" {
 		return errors.New("no kubeconfig context is known for this lab; set KUBECONFIG_CONTEXT in .env to the cluster's context, then run: labctl init")
 	}
@@ -90,7 +107,9 @@ func EnsureKubeconfig(ctx context.Context, runner toolchain.Runner, path, kubeCo
 	if _, err := runner.Run(ctx, cmd); err != nil || strings.TrimSpace(out.String()) == "" {
 		return fmt.Errorf("kubectl has no context %q, so labctl cannot find this lab's cluster; run: labctl init", kubeContext)
 	}
-	return writePrivate(path, out.Bytes())
+	// 0.0.0.0 is a bind-all address; connecting to it stalls on macOS.
+	data := bytes.ReplaceAll(out.Bytes(), []byte("0.0.0.0"), []byte("127.0.0.1"))
+	return writePrivate(path, data)
 }
 
 // writePrivate writes data to path with mode 0600 through a temporary file, so
@@ -118,6 +137,20 @@ func writePrivate(path string, data []byte) error {
 	return nil
 }
 
+// userKubeconfigPath is the kubeconfig a read of the user's own contexts uses:
+// userKubeconfig, or the default one when empty. The default is named outright
+// because the process's own KUBECONFIG may by now be the lab's.
+func userKubeconfigPath(userKubeconfig string) (string, error) {
+	if userKubeconfig != "" {
+		return userKubeconfig, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("locating the default kubeconfig: %w", err)
+	}
+	return filepath.Join(home, ".kube", "config"), nil
+}
+
 // UserContext is the current kubectl context in the user's own kubeconfig
 // (userKubeconfig, or kubectl's default when empty), which is not the lab's.
 // An empty result with no error means the user has no current context.
@@ -129,14 +162,9 @@ func UserContext(ctx context.Context, runner toolchain.Runner, userKubeconfig st
 	ctx, cancel := context.WithTimeout(ctx, kubectlTimeout)
 	defer cancel()
 
-	// Without a user kubeconfig the default one is named outright: the
-	// process's own KUBECONFIG may by now be the lab's.
-	if userKubeconfig == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("locating the default kubeconfig: %w", err)
-		}
-		userKubeconfig = filepath.Join(home, ".kube", "config")
+	userKubeconfig, err = userKubeconfigPath(userKubeconfig)
+	if err != nil {
+		return "", err
 	}
 	cmd := toolchain.Command{
 		Path: kubectl,
@@ -153,4 +181,33 @@ func UserContext(ctx context.Context, runner toolchain.Runner, userKubeconfig st
 		return "", err
 	}
 	return strings.TrimSpace(out.String()), nil
+}
+
+// ContextExists reports whether the user's own kubeconfig (userKubeconfig, or
+// kubectl's default when empty) has a context named name.
+func ContextExists(ctx context.Context, runner toolchain.Runner, userKubeconfig, name string) (bool, error) {
+	kubectl, err := runner.LookPath("kubectl")
+	if err != nil {
+		return false, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, kubectlTimeout)
+	defer cancel()
+
+	userKubeconfig, err = userKubeconfigPath(userKubeconfig)
+	if err != nil {
+		return false, err
+	}
+	cmd := toolchain.Command{
+		Path: kubectl,
+		Args: []string{"config", "get-contexts", name, "--no-headers"},
+		Env:  map[string]string{"KUBECONFIG": userKubeconfig},
+	}
+	if _, err := runner.Run(ctx, cmd); err != nil {
+		var exit *toolchain.ExitError
+		if errors.As(err, &exit) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }

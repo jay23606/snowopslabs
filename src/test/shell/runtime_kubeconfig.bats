@@ -130,7 +130,7 @@ STUB
   export KUBECONFIG="$LAB_FILE"
   stub_script k3d <<'STUB'
 case "$*" in
-  "cluster list"*) exit 0 ;;
+  "cluster list"*) [ -e "$STUB_DIR/deletes" ] || exit 0; exit 1 ;;
   "cluster delete"*) echo "delete from ${KUBECONFIG:-<default>}" >>"$STUB_DIR/deletes" ;;
 esac
 exit 0

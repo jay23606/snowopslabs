@@ -16,7 +16,9 @@ not_ready() {
 }
 
 command -v kind >/dev/null 2>&1 || not_ready "kind is not installed"
-clusters="$(kind get clusters 2>/dev/null || true)"
+if ! clusters="$(kind get clusters 2>&1)"; then
+  not_ready "kind cannot list clusters (is Docker running?): $(printf '%s\n' "$clusters" | head -n 1)"
+fi
 printf '%s\n' "$clusters" | grep -qx "$CLUSTER_NAME" ||
   not_ready "kind has no cluster named '$CLUSTER_NAME'; run 'labctl init'"
 

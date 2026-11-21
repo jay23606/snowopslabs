@@ -25,5 +25,7 @@ fi
 
 kubectl version -o yaml 2>/dev/null | grep -i "gitVersion" | head -2 || true
 # There is no kubeconfig or context to record: the ServiceAccount is the access.
-DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-cluster.local}" write_outputs "$CLUSTER_NAME" "" ""
+# A pod's state directory can be read-only; the outputs are a convenience there.
+DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-cluster.local}" write_outputs "$CLUSTER_NAME" incluster "" "" ||
+  echo "WARNING: could not write $(lab_outputs_file "$CLUSTER_NAME"); continuing without outputs." >&2
 echo "In-cluster runtime ready."
