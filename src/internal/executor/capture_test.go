@@ -61,3 +61,15 @@ func TestBroadcastStartEnd(t *testing.T) {
 type errBoom struct{}
 
 func (errBoom) Error() string { return "boom" }
+
+func TestCaptureOutputErrorIsRedacted(t *testing.T) {
+	e := New(t.TempDir())
+	e.SetEnv("API_TOKEN", "tok-abcdef123456")
+	_, err := e.CaptureOutput("sh", "-c", "echo bad $API_TOKEN >&2; exit 2")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if strings.Contains(err.Error(), "tok-abcdef123456") || !strings.Contains(err.Error(), "[redacted:API_TOKEN]") {
+		t.Errorf("error = %q, want the token masked", err.Error())
+	}
+}

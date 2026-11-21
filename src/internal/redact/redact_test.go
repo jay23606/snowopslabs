@@ -63,7 +63,9 @@ func TestNilRedactor(t *testing.T) {
 }
 
 func TestIsSecretKey(t *testing.T) {
-	cases := map[string]bool{"A_PASSWORD": true, "a_token": true, "X_KEY": true, "X_SECRET": true, "PASSWORD": false, "KEYS": false, "X_PASSWORD_FILE": false}
+	cases := map[string]bool{"A_PASSWORD": true, "a_token": true, "X_KEY": true, "X_SECRET": true, "PASSWORD": false, "KEYS": false, "X_PASSWORD_FILE": false,
+		"DB_PASS": true, "DB_PASSWD": true, "GCP_CREDENTIALS": true, "SENTRY_DSN": true, "SLACK_WEBHOOK": true,
+		"ALERT_WEBHOOK_URL": true, "WEBHOOK_TARGET": true, "alert_webhook_url": true, "PASS": false, "BYPASS": false}
 	for k, want := range cases {
 		if got := IsSecretKey(k); got != want {
 			t.Errorf("IsSecretKey(%q) = %v, want %v", k, got, want)
@@ -98,5 +100,28 @@ func TestProcessEnvMasksExportedSecrets(t *testing.T) {
 	r := New(ProcessEnv())
 	if got := r.Redact("x exported-secret-1 y"); got != "x [redacted:PROBE_SHELL_TOKEN] y" {
 		t.Errorf("Redact = %q", got)
+	}
+}
+
+func TestRedactMultiLineSecret(t *testing.T) {
+	pem := "-----BEGIN KEY-----\nMIIEvQIBADANBgkq\nshort\nh7Jd92kLmN3pQrSt\n-----END KEY-----"
+	r := New(map[string]string{"TLS_KEY": pem})
+	tests := []struct{ name, in, want string }{
+		{"whole value", pem, "[redacted:TLS_KEY]"},
+		{"one body line", "x MIIEvQIBADANBgkq y", "x [redacted:TLS_KEY] y"},
+		{"another body line", "h7Jd92kLmN3pQrSt", "[redacted:TLS_KEY]"},
+		{"short line left alone", "short", "short"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := r.Redact(tc.in); got != tc.want {
+				t.Errorf("Redact(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+	r2 := New(nil)
+	r2.Register("SSH_KEY", "aaaaaaaa1\r\nbbbbbbbb2\r\n")
+	if got := r2.Redact("bbbbbbbb2"); got != "[redacted:SSH_KEY]" {
+		t.Errorf("CRLF line not masked: %q", got)
 	}
 }

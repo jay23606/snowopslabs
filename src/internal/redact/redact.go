@@ -18,11 +18,18 @@ import (
 const MinSecretLen = 8
 
 // secretSuffixes mark an env key whose value is a secret.
-var secretSuffixes = []string{"_PASSWORD", "_TOKEN", "_KEY", "_SECRET"}
+var secretSuffixes = []string{
+	"_PASSWORD", "_PASSWD", "_PASS", "_TOKEN", "_KEY", "_SECRET",
+	"_CREDENTIALS", "_DSN", "_WEBHOOK", "_WEBHOOK_URL",
+}
 
-// IsSecretKey reports whether an env key names a secret by its suffix.
+// IsSecretKey reports whether an env key names a secret by its suffix, or by
+// containing WEBHOOK (a webhook URL carries its own credential).
 func IsSecretKey(key string) bool {
 	upper := strings.ToUpper(key)
+	if strings.Contains(upper, "WEBHOOK") {
+		return true
+	}
 	for _, s := range secretSuffixes {
 		if strings.HasSuffix(upper, s) {
 			return true
@@ -74,7 +81,9 @@ func (r *Redactor) RegisterEnv(env map[string]string) {
 }
 
 // Register adds one secret under name. Values shorter than MinSecretLen are
-// ignored, and a value already registered keeps its first name.
+// ignored, and a value already registered keeps its first name. A value with
+// newlines also registers each of its long-enough lines, since output is
+// masked one line at a time.
 func (r *Redactor) Register(name, value string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -84,6 +93,18 @@ func (r *Redactor) Register(name, value string) {
 }
 
 func (r *Redactor) addLocked(name, value string) bool {
+	added := r.addValueLocked(name, value)
+	if strings.Contains(value, "\n") {
+		for line := range strings.SplitSeq(value, "\n") {
+			if r.addValueLocked(name, strings.TrimRight(line, "\r")) {
+				added = true
+			}
+		}
+	}
+	return added
+}
+
+func (r *Redactor) addValueLocked(name, value string) bool {
 	if len(value) < MinSecretLen {
 		return false
 	}

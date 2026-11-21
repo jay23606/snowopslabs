@@ -133,7 +133,7 @@ func (e *Executor) BroadcastEnd(actionID, actionLabel string, err error) {
 		exitCode = 1
 		errStr = err.Error()
 	}
-	e.Broadcast.Send(ActionEvent{
+	e.send(ActionEvent{
 		ID:        actionID,
 		Type:      "action_end",
 		Action:    actionLabel,
@@ -150,15 +150,14 @@ func (e *Executor) runStreamed(actionLabel, cmdStr, name string, args ...string)
 
 func (e *Executor) runStreamedWith(actionID, actionLabel, cmdStr, name string, args ...string) error {
 	slog.Debug("action start", "action", actionLabel, "cmd", cmdStr, "id", actionID)
-	e.Broadcast.Send(ActionEvent{
+	e.registerSecrets()
+	e.send(ActionEvent{
 		ID:        actionID,
 		Type:      "action_start",
 		Action:    actionLabel,
 		Command:   cmdStr,
 		Timestamp: time.Now(),
 	})
-
-	e.registerSecrets()
 
 	cmd := exec.Command(name, args...) //nolint:noctx // provisioning command; process lifecycle handled via streamed Wait, not context
 	cmd.Dir = e.ProjectRoot
@@ -200,7 +199,7 @@ func (e *Executor) runStreamedWith(actionID, actionLabel, cmdStr, name string, a
 	}
 
 	slog.Debug("action end", "action", actionLabel, "id", actionID, "exitCode", exitCode, "err", errStr)
-	e.Broadcast.Send(ActionEvent{
+	e.send(ActionEvent{
 		ID:        actionID,
 		Type:      "action_end",
 		Action:    actionLabel,
@@ -211,6 +210,14 @@ func (e *Executor) runStreamedWith(actionID, actionLabel, cmdStr, name string, a
 	})
 
 	return err
+}
+
+// send broadcasts ev with secrets masked in its Command and Error fields,
+// which carry command lines and error text built from them.
+func (e *Executor) send(ev ActionEvent) {
+	ev.Command = e.Redactor.Redact(ev.Command)
+	ev.Error = e.Redactor.Redact(ev.Error)
+	e.Broadcast.Send(ev)
 }
 
 // registerSecrets adds the secrets in Env, including ones set by writing the
@@ -258,12 +265,13 @@ func (e *Executor) broadcastError(actionLabel, scriptPath string, args []string,
 }
 
 func (e *Executor) broadcastErrorWith(actionID, actionLabel, cmdStr, errMsg string) {
-	e.Broadcast.Send(ActionEvent{
+	e.registerSecrets()
+	e.send(ActionEvent{
 		ID: actionID, Type: "action_start", Action: actionLabel,
 		Command: cmdStr, Timestamp: time.Now(),
 	})
 	exitCode := 1
-	e.Broadcast.Send(ActionEvent{
+	e.send(ActionEvent{
 		ID: actionID, Type: "action_end", Action: actionLabel,
 		Command: cmdStr, ExitCode: &exitCode, Error: errMsg, Timestamp: time.Now(),
 	})
@@ -271,7 +279,7 @@ func (e *Executor) broadcastErrorWith(actionID, actionLabel, cmdStr, errMsg stri
 
 func (e *Executor) broadcastEndError(actionID, actionLabel, cmdStr string, err error) {
 	exitCode := 1
-	e.Broadcast.Send(ActionEvent{
+	e.send(ActionEvent{
 		ID: actionID, Type: "action_end", Action: actionLabel,
 		Command: cmdStr, ExitCode: &exitCode, Error: err.Error(), Timestamp: time.Now(),
 	})
@@ -318,6 +326,7 @@ func (e *Executor) SetEnv(key, value string) {
 
 // CaptureOutput runs a command and returns its stdout as a string.
 func (e *Executor) CaptureOutput(name string, args ...string) (string, error) {
+	e.registerSecrets()
 	cmd := exec.Command(name, args...) //nolint:noctx // provisioning command; process lifecycle handled via streamed Wait, not context
 	cmd.Dir = e.ProjectRoot
 	cmd.Env = e.buildEnv()
@@ -326,7 +335,7 @@ func (e *Executor) CaptureOutput(name string, args ...string) (string, error) {
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return "", fmt.Errorf("%w: %s", err, string(exitErr.Stderr))
+			return "", fmt.Errorf("%w: %s", err, e.Redactor.Redact(string(exitErr.Stderr)))
 		}
 		return "", err
 	}
