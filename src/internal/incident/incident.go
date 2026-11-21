@@ -588,7 +588,9 @@ func (e *Engine) Eligible() []*Fault {
 
 // PickRandom picks a random eligible fault, optionally from one category. A
 // non-zero seed makes the pick repeatable, so a team can all get the same one.
-func (e *Engine) PickRandom(seed int64, category string) (*Fault, error) {
+// It skips the faults named in exclude and, when notSince is set, every fault
+// injected within that window, the active one included.
+func (e *Engine) PickRandom(seed int64, category string, notSince time.Duration, exclude []string) (*Fault, error) {
 	var pool []*Fault
 	for _, f := range e.Eligible() {
 		if category == "" || f.Category == category {
@@ -597,6 +599,32 @@ func (e *Engine) PickRandom(seed int64, category string) (*Fault, error) {
 	}
 	if len(pool) == 0 {
 		return nil, fmt.Errorf("no eligible faults%s - are the demo apps deployed?", catSuffix(category))
+	}
+
+	skip := make(map[string]bool)
+	for _, name := range exclude {
+		skip[name] = true
+	}
+	if notSince > 0 {
+		cutoff := time.Now().UTC().Add(-notSince)
+		recs, err := e.History()
+		if err != nil {
+			return nil, fmt.Errorf("reading incident history: %w", err)
+		}
+		for _, r := range recs {
+			if r.InjectedAt.After(cutoff) {
+				skip[r.Fault] = true
+			}
+		}
+		if active, err := e.Active(); err == nil && active != nil && active.InjectedAt.After(cutoff) {
+			skip[active.Fault] = true
+		}
+	}
+	// Filtering keeps the pool sorted by name, so a seed still gives the same
+	// pick on every lab with the same history.
+	pool = slices.DeleteFunc(pool, func(f *Fault) bool { return skip[f.Name] })
+	if len(pool) == 0 {
+		return nil, fmt.Errorf("no eligible faults%s after applying filters - try without --not-since or --exclude", catSuffix(category))
 	}
 	if seed == 0 {
 		seed = time.Now().UnixNano()
@@ -607,6 +635,37 @@ func (e *Engine) PickRandom(seed int64, category string) (*Fault, error) {
 		idx = -idx
 	}
 	return pool[idx], nil
+}
+
+// ParsePickFilters reads the not-since and exclude inputs of a random pick, as
+// the CLI flags and the HTTP query give them. Every exclude value may name
+// several faults separated by commas, and each must exist, so a typo fails
+// before anything touches the cluster.
+func (e *Engine) ParsePickFilters(notSince string, exclude []string) (time.Duration, []string, error) {
+	var d time.Duration
+	if notSince != "" {
+		var err error
+		if d, err = time.ParseDuration(notSince); err != nil {
+			return 0, nil, fmt.Errorf("invalid not-since duration: %w", err)
+		}
+		if d < 0 {
+			return 0, nil, errors.New("not-since duration must be non-negative")
+		}
+	}
+	var names []string
+	for _, v := range exclude {
+		for name := range strings.SplitSeq(v, ",") {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			if _, ok := e.faults[name]; !ok {
+				return 0, nil, fmt.Errorf("excluded fault %q does not exist (see 'labctl incident list')", name)
+			}
+			names = append(names, name)
+		}
+	}
+	return d, names, nil
 }
 
 func catSuffix(category string) string {

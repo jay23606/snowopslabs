@@ -54,9 +54,11 @@ The UI asks the same question in its inject dialog.
 sizing, the day before, rounds, rescue and review.
 
 ```bash
-labctl incident inject --random --silent      # surprise fault, name hidden
-labctl incident inject --random --seed 42     # reproducible pick for a whole team
+labctl incident inject --random --silent                           # surprise fault, name hidden
+labctl incident inject --random --seed 42                          # reproducible pick for a whole team
 labctl incident inject --random --category network
+labctl incident inject --random --not-since 1h                     # skip faults from the last hour
+labctl incident inject --random --exclude oom-kill,cpu-throttling  # skip named faults
 ```
 
 `inject` flags:
@@ -66,6 +68,8 @@ labctl incident inject --random --category network
 | `--random` | off | pick a random eligible fault |
 | `--seed` | - | seed for `--random`, for reproducible team exercises |
 | `--category` | - | restrict `--random` to `workload`, `network`, `resources`, `storage` or `config` |
+| `--not-since` | - | skip faults injected within this duration, such as `30m` or `1h`, the active one included; only with `--random` |
+| `--exclude` | - | skip these faults: names separated by commas, or the flag repeated; only with `--random`; an unknown name is an error |
 | `--silent` | off | do not reveal which fault was injected: the inject prints neither the fault's name nor its script's output, `incident list` does not mark the active fault, unresolved `incident status` says only `NOT RESOLVED - keep digging, or: labctl incident hint` (a check error may say it could not run, without the check name or output), resolved status names the check and fault, the inject arms its alert rule under the neutral name `labfault-silent`, so Prometheus' Alerts page does not name the fault, and the run history records the inject with the target `(hidden)` and withholds its output (`labctl runs logs` and `GET /runs/{id}/logs` refuse it) |
 | `--force` | off | inject even when another incident is active |
 | `--deploy-prereqs` | off | install the platform components the fault needs, and build and deploy the apps it lists under `prerequisites.apps` (and its target, when that is an app), if they are not running. Without it, a missing app stops the inject with the command that deploys it. |
@@ -177,7 +181,7 @@ the ingress the metrics provider creates.
 
 REST: `GET /api/v2/incidents`,
 `POST /api/v2/incidents/{name}/inject[?app&silent&force]`,
-`POST /api/v2/incidents/inject-random[?app&seed&category]`,
+`POST /api/v2/incidents/inject-random[?app&seed&category&not-since&exclude]`,
 `GET /api/v2/incidents/status`, `POST /api/v2/incidents/hint`,
 `GET /api/v2/incidents/history`, `POST /api/v2/incidents/resolve[?name=]`.
 Silent mode hides the fault's identity in API responses until it is resolved:
@@ -187,7 +191,11 @@ the active incident. While unresolved, the status check contains only
 result is returned. A silent inject from the UI broadcasts no job label or
 script output, and `GET /runs/{id}/logs` for its run answers `403 hidden_run`.
 `inject-random` picks among the faults eligible for the app named in `app`, and
-answers `409 no_eligible_fault` when there are none. A second inject while one
+answers `409 no_eligible_fault` when there are none, also when `not-since` and
+`exclude` leave none. Those two work as the `--not-since` and `--exclude` flags:
+`exclude` may repeat, and each value may list names separated by commas. A
+`not-since` that is not a duration or is negative, or an unknown name in
+`exclude`, answers `400 invalid_input`. A second inject while one
 is active answers `409 incident_active`; for a silent incident the message does
 not name it, and neither does `labctl incident inject`. With auth on, inject,
 `inject-random` and `resolve` are operator-only: a participant gets

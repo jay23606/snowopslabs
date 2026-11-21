@@ -340,6 +340,11 @@ func TestIncident_Failures(t *testing.T) {
 		{"resolve a fault that does not exist", nil, []string{"incident", "resolve", "ghost"}, "see 'labctl incident list'"},
 		{"list in a format that does not exist", nil, []string{"incident", "list", "-o", "csv"}, `unknown output format "csv": use -o table or -o json`},
 		{"random pick in a category with no faults", nil, []string{"incident", "inject", "--random", "--category", "storage"}, "storage"},
+		{"--not-since without --random", nil, []string{"incident", "inject", labtest.Fault, "--not-since", "1h"}, "--not-since and --exclude require --random"},
+		{"--exclude without --random", nil, []string{"incident", "inject", labtest.Fault, "--exclude", labtest.Fault}, "--not-since and --exclude require --random"},
+		{"--not-since that does not parse", nil, []string{"incident", "inject", "--random", "--not-since", "soon"}, "invalid not-since duration"},
+		{"--not-since that is negative", nil, []string{"incident", "inject", "--random", "--not-since", "-1h"}, "not-since duration must be non-negative"},
+		{"--exclude with a typo", nil, []string{"incident", "inject", "--random", "--exclude", labtest.Fault + ", ghost"}, `excluded fault "ghost" does not exist`},
 		{"a second inject while one is active",
 			func(_ *testing.T, l *terminal) { l.mustRun("incident", "inject", labtest.Fault) },
 			[]string{"incident", "inject", labtest.Fault}, "resolve it first, or use --force"},
@@ -439,5 +444,25 @@ func TestIncident_ForceInjectReplacesTheActiveIncident(t *testing.T) {
 	l.mustRun("incident", "inject", labtest.Fault, "--force")
 	if !l.exists(faultMarker) {
 		t.Error("--force did not run the fault's inject script again")
+	}
+}
+
+// The same seed picks another fault once the first one is in the recent
+// history.
+func TestIncident_RandomInjectSkipsARecentFault(t *testing.T) {
+	l := newTerminal(t)
+	l.Write(t, "incidents/other-fault/fault.yaml", strings.ReplaceAll(readFixture(t, l, "incidents/"+labtest.Fault+"/fault.yaml"), "demo-fault", "other-fault"))
+	for _, f := range []string{"inject.sh", "resolve.sh", "checks/resolved.sh", "hints.md", "solution.md"} {
+		l.Write(t, "incidents/other-fault/"+f, readFixture(t, l, "incidents/"+labtest.Fault+"/"+f))
+	}
+
+	l.mustRun("incident", "inject", "--random", "--seed", "3")
+	if !l.exists(faultMarker) {
+		t.Fatalf("--seed 3 did not pick %s, so the test cannot show the filter changing the pick", labtest.Fault)
+	}
+	l.mustRun("incident", "resolve")
+	l.mustRun("incident", "inject", "--random", "--seed", "3", "--not-since", "1h")
+	if !l.exists("incidents/other-fault/BROKEN") {
+		t.Errorf("--not-since 1h did not skip %s, resolved a moment ago", labtest.Fault)
 	}
 }

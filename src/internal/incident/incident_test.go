@@ -6,14 +6,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/snowops-oss/snowopslabs/internal/executor"
+	"github.com/snowops-oss/snowopslabs/internal/results"
 	"github.com/snowops-oss/snowopslabs/internal/workload"
 	"github.com/snowops-oss/snowopslabs/pkg/checks"
 )
@@ -292,31 +295,155 @@ func TestResolve_EscapeHatch(t *testing.T) {
 func TestPickRandom(t *testing.T) {
 	e, _ := testEngine(t, "fault-a", "fault-b", "fault-c")
 
-	first, err := e.PickRandom(42, "")
+	first, err := e.PickRandom(42, "", 0, nil)
 	if err != nil {
 		t.Fatalf("PickRandom: %v", err)
 	}
 	for range 5 {
-		again, _ := e.PickRandom(42, "")
+		again, _ := e.PickRandom(42, "", 0, nil)
 		if again.Name != first.Name {
 			t.Fatalf("seeded pick must be deterministic: %q vs %q", again.Name, first.Name)
 		}
 	}
 
-	if _, err := e.PickRandom(1, "network"); err == nil {
+	if _, err := e.PickRandom(1, "network", 0, nil); err == nil {
 		t.Fatal("no eligible faults in category network - expected error")
 	}
-	if f, err := e.PickRandom(1, "workload"); err != nil || f == nil {
+	if f, err := e.PickRandom(1, "workload", 0, nil); err != nil || f == nil {
 		t.Fatalf("category filter: %v", err)
 	}
 }
 
+// With no app deployed there is nothing to pick, and the error says so even
+// when filters are set, rather than blaming the filters.
 func TestPickRandom_NoEligible(t *testing.T) {
 	root := t.TempDir() // prereq app missing
 	writeFault(t, root, "fault-a")
 	e := NewEngine(root, "k3d.local")
-	if _, err := e.PickRandom(1, ""); err == nil {
-		t.Fatal("expected no-eligible error")
+	if _, err := e.PickRandom(1, "", time.Hour, []string{"fault-a"}); err == nil || !strings.Contains(err.Error(), "are the demo apps deployed?") {
+		t.Fatalf("err = %v, want the no-eligible error that asks about the demo apps", err)
+	}
+}
+
+// writeHistoryRecord records a finished run of fault that was injected ago
+// before now.
+func writeHistoryRecord(t *testing.T, e *Engine, fault string, ago time.Duration) {
+	t.Helper()
+	at := time.Now().UTC().Add(-ago)
+	rec := results.Record{Kind: results.KindIncident, Name: fault, StartedAt: at, EndedAt: at.Add(time.Minute), Score: -1, Outcome: results.OutcomeResolved}
+	if err := e.resultsStore().Append(rec); err != nil {
+		t.Fatalf("append history record: %v", err)
+	}
+}
+
+func TestPickRandom_Filters(t *testing.T) {
+	all := []string{"fault-a", "fault-b", "fault-c"}
+	tests := []struct {
+		name     string
+		recent   []string // injected 10 minutes ago
+		old      []string // injected a day ago
+		notSince time.Duration
+		exclude  []string
+		want     []string // the faults seeds 1 to 50 pick between them
+		wantErr  string
+	}{
+		{name: "exclude skips the named faults", exclude: []string{"fault-a", "fault-b"}, want: []string{"fault-c"}},
+		{name: "not-since skips a fault injected within the window", recent: []string{"fault-a"}, notSince: time.Hour, want: []string{"fault-b", "fault-c"}},
+		{name: "not-since keeps a fault injected before the window", old: []string{"fault-a"}, notSince: time.Hour, want: all},
+		{name: "zero not-since skips nothing", recent: []string{"fault-a"}, want: all},
+		{name: "both filters apply together", recent: []string{"fault-a"}, notSince: time.Hour, exclude: []string{"fault-b"}, want: []string{"fault-c"}},
+		{name: "filters that empty the pool say so", recent: []string{"fault-a", "fault-b"}, notSince: time.Hour, exclude: []string{"fault-c"}, wantErr: "after applying filters"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, _ := testEngine(t, all...)
+			for _, f := range tt.recent {
+				writeHistoryRecord(t, e, f, 10*time.Minute)
+			}
+			for _, f := range tt.old {
+				writeHistoryRecord(t, e, f, 24*time.Hour)
+			}
+			if tt.wantErr != "" {
+				if _, err := e.PickRandom(1, "", tt.notSince, tt.exclude); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want it to say %q", err, tt.wantErr)
+				}
+				return
+			}
+			picked := map[string]bool{}
+			for seed := int64(1); seed <= 50; seed++ {
+				f, err := e.PickRandom(seed, "", tt.notSince, tt.exclude)
+				if err != nil {
+					t.Fatalf("seed %d: %v", seed, err)
+				}
+				picked[f.Name] = true
+			}
+			if got := slices.Sorted(maps.Keys(picked)); !slices.Equal(got, tt.want) {
+				t.Errorf("seeds 1 to 50 picked %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// The active fault counts as used: not-since skips it while it is active, and
+// through the run history once it is resolved.
+func TestPickRandom_NotSinceExcludesActive(t *testing.T) {
+	e, root := testEngine(t, "fault-a", "fault-b")
+	ex := executor.New(root)
+	if _, err := e.Inject("fault-a", ex, false, false); err != nil {
+		t.Fatalf("Inject fault-a: %v", err)
+	}
+	f, err := e.PickRandom(42, "", time.Hour, nil)
+	if err != nil {
+		t.Fatalf("PickRandom with notSince: %v", err)
+	}
+	if f.Name != "fault-b" {
+		t.Fatalf("expected fault-b (fault-a is active), got %s", f.Name)
+	}
+
+	if _, err := e.Resolve("", ex, ""); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	f, err = e.PickRandom(42, "", time.Hour, nil)
+	if err != nil {
+		t.Fatalf("PickRandom after resolve: %v", err)
+	}
+	if f.Name != "fault-b" {
+		t.Fatalf("expected fault-b (fault-a in history), got %s", f.Name)
+	}
+}
+
+// The CLI and the HTTP API both read the filters through ParsePickFilters, so
+// they give the same answer to the same input.
+func TestParsePickFilters(t *testing.T) {
+	e, _ := testEngine(t, "fault-a", "fault-b", "fault-c")
+	tests := []struct {
+		name         string
+		notSince     string
+		exclude      []string
+		wantNotSince time.Duration
+		wantExclude  []string
+		wantErr      string
+	}{
+		{name: "nothing set"},
+		{name: "every exclude value is split and trimmed", notSince: "90m", exclude: []string{"fault-a, fault-b", " fault-c,"},
+			wantNotSince: 90 * time.Minute, wantExclude: []string{"fault-a", "fault-b", "fault-c"}},
+		{name: "a duration that does not parse", notSince: "soon", wantErr: "invalid not-since duration"},
+		{name: "a negative duration", notSince: "-1h", wantErr: "not-since duration must be non-negative"},
+		{name: "an unknown fault", exclude: []string{"fault-a,ghost"}, wantErr: `excluded fault "ghost" does not exist`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			notSince, exclude, err := e.ParsePickFilters(tt.notSince, tt.exclude)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want it to say %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil || notSince != tt.wantNotSince || !slices.Equal(exclude, tt.wantExclude) {
+				t.Fatalf("got %v, %q, %v; want %v, %q", notSince, exclude, err, tt.wantNotSince, tt.wantExclude)
+			}
+		})
 	}
 }
 
