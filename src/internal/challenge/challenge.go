@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/snowops-oss/snowopslabs/internal/results"
+	"github.com/snowops-oss/snowopslabs/pkg/scenario"
 	"gopkg.in/yaml.v3"
 )
 
@@ -64,14 +65,16 @@ type GCheck struct {
 
 // Challenge is the top-level challenge.yaml schema.
 type Challenge struct {
-	Name        string      `yaml:"name"`
-	DisplayName string      `yaml:"displayName"`
-	Description string      `yaml:"description"`
-	Category    string      `yaml:"category"`
-	ParTime     string      `yaml:"parTime"` // e.g. "10m"
-	Setup       SetupSpec   `yaml:"setup"`
-	Grading     GradingSpec `yaml:"grading"`
-	HintPenalty int         `yaml:"hintPenalty"` // % per hint; default 5
+	Name        string `yaml:"name"`
+	DisplayName string `yaml:"displayName"`
+	Description string `yaml:"description"`
+	Category    string `yaml:"category"`
+	// Meta is the track, level and expected minutes the catalog filters on.
+	scenario.Meta `yaml:",inline"`
+	ParTime       string      `yaml:"parTime"` // e.g. "10m"
+	Setup         SetupSpec   `yaml:"setup"`
+	Grading       GradingSpec `yaml:"grading"`
+	HintPenalty   int         `yaml:"hintPenalty"` // % per hint; default 5
 	// Silent keeps the setup's names from the learner until the run ends:
 	// finding the faults is the exercise.
 	Silent bool `yaml:"silent,omitempty"`
@@ -106,6 +109,7 @@ func (c *Challenge) Validate() []string {
 	if !c.Grading.UseDetectionCheck && len(c.Grading.Checks) == 0 {
 		errs = append(errs, "grading: either useDetectionCheck or checks must be set")
 	}
+	errs = append(errs, c.Meta.Validate()...)
 	if c.ParTime != "" {
 		if _, err := time.ParseDuration(c.ParTime); err != nil {
 			errs = append(errs, "parTime: invalid duration format (use e.g. 10m, 1h)")
@@ -221,6 +225,7 @@ func (e *Engine) Load(name string) (*Challenge, error) {
 		return nil, fmt.Errorf("challenge %s is malformed (run 'labctl validate'): %w", name, err)
 	}
 	c.dir = dir
+	c.ApplyDefaults()
 	if errs := c.Validate(); len(errs) > 0 {
 		return nil, fmt.Errorf("challenge %s is malformed (run 'labctl validate'): %s", name, strings.Join(errs, "; "))
 	}

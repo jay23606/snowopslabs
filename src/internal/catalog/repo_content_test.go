@@ -40,6 +40,34 @@ func TestRepoContentValidates(t *testing.T) {
 	}
 }
 
+// TestShippedContentStatesTrackLevelAndMinutes checks that every shipped item
+// says its track, level and minutes itself rather than leaning on the
+// defaults, so the catalog filters are honest about what each item is.
+func TestShippedContentStatesTrackLevelAndMinutes(t *testing.T) {
+	c, err := Load(repoRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, doc := range c.nodes {
+		if doc == nil || len(doc.Content) == 0 {
+			continue
+		}
+		stated := map[string]bool{}
+		top := doc.Content[0].Content
+		for i := 0; i+1 < len(top); i += 2 {
+			stated[top[i].Value] = true
+		}
+		for _, field := range []string{"track", "level", "minutes"} {
+			if !stated[field] {
+				t.Errorf("%s does not set %s", c.sources[key], field)
+			}
+		}
+		if stated["estimatedMinutes"] {
+			t.Errorf("%s uses estimatedMinutes; shipped content uses minutes", c.sources[key])
+		}
+	}
+}
+
 // TestVerifiedContentSet pins which scenarios and incidents are marked
 // verified, so changing a verified flag requires updating this test too.
 func TestVerifiedContentSet(t *testing.T) {

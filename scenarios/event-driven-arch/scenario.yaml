@@ -4,6 +4,9 @@ verified: true
 displayName: "Event-Driven Architecture"
 description: "An 'orders' topic on Kafka (Strimzi) with a producer/consumer flow already running, and producers ramped to five times what the consumer group can process. Orders are piling up. Diagnose the backlog from Kafka's own tooling and from the lag dashboard, then restore throughput by scaling the group up to the topic's partition count, and no further, because a fourth consumer gets no partition and adds nothing."
 category: data
+track: kubernetes
+level: advanced
+minutes: 40
 prerequisites:
   platform:
     # Its checks and dashboards read Prometheus through the ingress.

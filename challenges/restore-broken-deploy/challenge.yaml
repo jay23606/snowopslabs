@@ -5,6 +5,9 @@ description: >
   served by the old version, the rollout has not advanced, and the deploy
   pipeline is red. Get the rollout healthy before the clock runs out.
 category: workload
+track: kubernetes
+level: beginner
+minutes: 8
 parTime: "6m"
 setup:
   type: incident

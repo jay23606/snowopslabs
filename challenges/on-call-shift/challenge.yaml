@@ -6,6 +6,9 @@ description: >
   change went out, and nobody wrote down which. Get go-api serving, and keep
   it serving: the shift ends when every change that broke it is fixed.
 category: workload
+track: kubernetes
+level: advanced
+minutes: 15
 parTime: "12m"
 silent: true
 setup:

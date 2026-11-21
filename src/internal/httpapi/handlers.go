@@ -24,6 +24,7 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/scenario"
 	platsvc "github.com/snowops-oss/snowopslabs/internal/service/platform"
 	"github.com/snowops-oss/snowopslabs/pkg/checks"
+	schema "github.com/snowops-oss/snowopslabs/pkg/scenario"
 )
 
 // validName matches identifiers safe to use as file-path segments and shell arguments.
@@ -645,7 +646,11 @@ func (s *Server) scenariosUsingComponent(category, name string) []ScenarioRef {
 }
 
 func (s *Server) handleListScenarios(w http.ResponseWriter, r *http.Request) {
-	respondCatalog(w, r, s.scenes.Status())
+	f, ok := catalogFilter(w, r)
+	if !ok {
+		return
+	}
+	respondCatalog(w, r, schema.Select(s.scenes.Status(), f))
 }
 
 // scenarioResp is a scenario as the UI needs it: the scenario, the workload it

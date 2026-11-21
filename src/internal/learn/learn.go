@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/snowops-oss/snowopslabs/internal/results"
+	"github.com/snowops-oss/snowopslabs/pkg/scenario"
 	"gopkg.in/yaml.v3"
 )
 
@@ -85,10 +86,14 @@ type Module struct {
 
 // Path is the top-level learning path schema.
 type Path struct {
-	Name             string   `yaml:"name"`
-	DisplayName      string   `yaml:"displayName"`
-	Description      string   `yaml:"description"`
-	Tags             []string `yaml:"tags"`
+	Name        string   `yaml:"name"`
+	DisplayName string   `yaml:"displayName"`
+	Description string   `yaml:"description"`
+	Tags        []string `yaml:"tags"`
+	// Meta is the track, level and expected minutes the catalog filters on.
+	scenario.Meta `yaml:",inline"`
+	// EstimatedMinutes is the older name for Minutes. Either may be set, and
+	// Normalize fills the other from it.
 	EstimatedMinutes int      `yaml:"estimatedMinutes"`
 	Modules          []Module `yaml:"modules"`
 	dir              string   // resolved directory on disk
@@ -97,9 +102,28 @@ type Path struct {
 // Dir returns the directory this path was loaded from.
 func (p *Path) Dir() string { return p.dir }
 
+// Normalize applies the track and level defaults and makes minutes and
+// estimatedMinutes agree when only one of them is set.
+func (p *Path) Normalize() {
+	p.ApplyDefaults()
+	switch {
+	case p.Minutes == 0:
+		p.Minutes = p.EstimatedMinutes
+	case p.EstimatedMinutes == 0:
+		p.EstimatedMinutes = p.Minutes
+	}
+}
+
 // Validate checks required fields and returns any validation errors.
 func (p *Path) Validate() []string {
 	var errs []string
+	errs = append(errs, p.Meta.Validate()...)
+	if p.EstimatedMinutes < 0 {
+		errs = append(errs, fmt.Sprintf("estimatedMinutes must be a positive number of minutes, got %d", p.EstimatedMinutes))
+	}
+	if p.Minutes > 0 && p.EstimatedMinutes > 0 && p.Minutes != p.EstimatedMinutes {
+		errs = append(errs, fmt.Sprintf("minutes (%d) and estimatedMinutes (%d) disagree: set one, or make them equal", p.Minutes, p.EstimatedMinutes))
+	}
 	if p.Name == "" {
 		errs = append(errs, "name is required")
 	}
@@ -206,6 +230,7 @@ func (e *Engine) LoadPath(name string) (*Path, error) {
 		return nil, fmt.Errorf("learning path %s is malformed (run 'labctl validate'): %w", name, err)
 	}
 	p.dir = dir
+	p.Normalize()
 	if errs := p.Validate(); len(errs) > 0 {
 		return nil, fmt.Errorf("learning path %s is malformed (run 'labctl validate'): %s", name, strings.Join(errs, "; "))
 	}

@@ -46,7 +46,7 @@ without asking the learner to interpret anything. 1: the description promises a
 skill the path never exercises.
 
 **5 - Time honesty.** 5: the cold walk landed within about 25% of
-`estimatedMinutes`. 3: off by roughly double. 1: off by enough that someone
+`minutes`. 3: off by roughly double. 1: off by enough that someone
 would abandon it part-way, which is worse than not starting.
 
 **6: Resumability.** 5: progress survives a restart, `progress` is accurate
@@ -124,6 +124,6 @@ checks that disagree with `labctl incident status` cap this at 2.
 - **Do not re-litigate the wrapped content.** If the incident is weak, that is
   dimension 3 and a pointer to the incident's own review; it is not licence to
   mark the challenge down twice.
-- Timing evidence is the reviewer's own run. A `parTime` or `estimatedMinutes`
+- Timing evidence is the reviewer's own run. A `parTime` or `minutes`
   you did not measure is not evidence, and saying so is a finding.
 - Absence of evidence is not a 5. A phase you did not run is stated as a gap.

@@ -14,6 +14,7 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/incident"
 	"github.com/snowops-oss/snowopslabs/internal/labcheck"
 	"github.com/snowops-oss/snowopslabs/pkg/checks"
+	schema "github.com/snowops-oss/snowopslabs/pkg/scenario"
 )
 
 func (s *Server) incidentRunner() *checks.Runner {
@@ -37,6 +38,10 @@ type faultResp struct {
 
 // handleListIncidents lists faults plus the active incident (if any).
 func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
+	f, ok := catalogFilter(w, r)
+	if !ok {
+		return
+	}
 	active, err := s.incidents.Active()
 	if err != nil {
 		respondInternal(w, r, err)
@@ -47,7 +52,7 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	// does not take the binding lock, so this polled read never waits behind
 	// an injection.
 	bound := s.activeIncidentWorkload()
-	faults := s.incidents.ListBound(bound)
+	faults := schema.Select(s.incidents.ListBound(bound), f)
 	out := make([]faultResp, 0, len(faults))
 	for _, f := range faults {
 		out = append(out, faultResp{Fault: f, PinnedApps: s.incidents.PinnedApps(f.Name), Workload: workloadResp(bound)})

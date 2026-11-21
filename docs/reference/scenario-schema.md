@@ -15,6 +15,9 @@ name: my-scenario                     # must match the directory name
 displayName: "My Scenario"            # shown in the UI and CLI
 description: "What this scenario teaches"
 category: observability               # grouping label
+track: kubernetes                     # kubernetes | cicd | iac; default kubernetes
+level: intermediate                   # beginner | intermediate | advanced; default intermediate
+minutes: 30                           # expected time to finish; optional
 
 prerequisites:
   platform: [ingress, monitoring/metrics]
@@ -44,6 +47,28 @@ explore:
   tips:
     - "Generate traffic first, or the dashboards stay empty"
 ```
+
+## Track, level and minutes
+
+Three optional fields let a learner browse the catalog by area, difficulty and
+time. Incidents, challenges and learning paths take the same three.
+
+| Field | Values | When absent |
+|---|---|---|
+| `track` | `kubernetes`, `cicd`, `iac` | `kubernetes` |
+| `level` | `beginner`, `intermediate`, `advanced` | `intermediate` |
+| `minutes` | a whole number above 0 | not shown |
+
+A **beginner** item is a guided exercise on one concept. An **advanced** one is
+a diagnosis or build that takes several steps, often under load. `minutes` is
+how long a learner who has not seen it needs, not the fastest run. The machine
+size a scenario needs is `requirements`, not a level.
+
+`labctl validate` rejects an unknown track or level, or a `minutes` below 0,
+with the file, line and the values it accepts. `labctl scenario list`,
+`incident list`, `challenge list` and `learn list` take `--track` and `--level`;
+the matching `/api/v2` list routes take `?track=` and `?level=`. Shipped
+content states all three fields rather than leaning on the defaults.
 
 `prerequisites.platform` lists everything the scenario's own parts need, so
 `scenario up --deploy-prereqs` works on a bare cluster: `ingress` for a

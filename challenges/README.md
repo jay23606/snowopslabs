@@ -23,6 +23,9 @@ name: restore-broken-deploy        # must match directory name
 displayName: "Restore the broken deploy"
 description: "What the practitioner experiences"
 category: workload                 # workload | network | resources | config
+track: kubernetes                  # kubernetes | cicd | iac; default kubernetes
+level: beginner                    # beginner | intermediate | advanced; default intermediate
+minutes: 10                        # expected time, setup to submit; optional
 parTime: "10m"                     # Go duration string; omit for unscored time
 setup:
   type: incident                   # incident | scenario
@@ -43,12 +46,12 @@ hintPenalty: 5                     # % score deducted per hint (default 5)
 
 ## Current challenges
 
-| Challenge | Category | Par | Setup |
-|-----------|----------|-----|-------|
-| `restore-broken-deploy` | workload | 6m | `bad-deploy-rollout` incident |
-| `find-the-memory-leak` | resources | 8m | `oom-kill` incident |
-| `make-the-slo-green` | network | 6m | `stray-pod-behind-service` incident |
-| `on-call-shift` | workload | 12m | two incidents from different categories, injected together and not named (`silent`) |
+| Challenge | Category | Level | Time | Par | Setup |
+|-----------|----------|-------|------|-----|-------|
+| `restore-broken-deploy` | workload | beginner | 8m | 6m | `bad-deploy-rollout` incident |
+| `find-the-memory-leak` | resources | beginner | 10m | 8m | `oom-kill` incident |
+| `make-the-slo-green` | network | advanced | 10m | 6m | `stray-pod-behind-service` incident |
+| `on-call-shift` | workload | advanced | 15m | 12m | two incidents from different categories, injected together and not named (`silent`) |
 
 ### Several faults at once
 

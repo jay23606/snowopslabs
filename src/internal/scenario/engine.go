@@ -671,6 +671,7 @@ func (e *Engine) Status() []ScenarioStatus {
 			DisplayName: resolve(s.DisplayName),
 			Description: resolve(s.Description),
 			Category:    s.Category,
+			Meta:        s.Meta,
 			Runtimes:    s.Runtimes,
 			Active:      e.isActive(s.Name),
 			App:         app,
@@ -705,12 +706,13 @@ func (e *Engine) DeactivateAll() []string {
 
 // ScenarioStatus is a lightweight status for listing scenarios.
 type ScenarioStatus struct {
-	Name        string   `json:"name"`
-	DisplayName string   `json:"displayName"`
-	Description string   `json:"description,omitempty"`
-	Category    string   `json:"category"`
-	Runtimes    []string `json:"runtimes,omitempty"`
-	Active      bool     `json:"active"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+	Description string `json:"description,omitempty"`
+	Category    string `json:"category"`
+	schema.Meta
+	Runtimes []string `json:"runtimes,omitempty"`
+	Active   bool     `json:"active"`
 	// App is the workload this scenario runs against: the one it was activated
 	// against if it is active, otherwise the current binding.
 	App string `json:"app,omitempty"`
@@ -777,6 +779,7 @@ func loadScenarioFile(path string) (*Scenario, error) {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 
+	s.ApplyDefaults()
 	if err := s.Validate(); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}

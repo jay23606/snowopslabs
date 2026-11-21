@@ -4,6 +4,8 @@ import { qk } from '../lib/queryClient'
 import { useApiQuery } from '../hooks/useApiQuery'
 import type { Scenario, ScenarioParameter, ScenarioCheck, ScenarioVerifyResult, NotifyFn } from '../types'
 import { Badge } from '../components/Badge'
+import { CatalogFilters, MetaBadges, NoMatches } from '../components/CatalogMeta'
+import { NO_FILTER, matchesMeta, metaFilterActive, type CatalogFilter } from '../lib/catalog'
 import { requirementLabels } from '../lib/requirements'
 import { ErrorState } from '../components/ErrorState'
 import { Icon } from '../components/Icon'
@@ -39,6 +41,7 @@ function allComponents(s: Pick<Scenario, 'components' | 'stages'> | null | undef
 export function Scenarios({ notify, requestConfirm }: ScenariosProps) {
   const { data: scenarios = [], loading, loaded, loadError, refreshing, reload: load } = useApiQuery(qk.scenarios, api.listScenarios)
   const [filter, setFilter] = useState('')
+  const [meta, setMeta] = useState<CatalogFilter>(NO_FILTER)
   const [detail, setDetail] = useState<Scenario | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const { busy, run } = useJobRunner(notify)
@@ -195,12 +198,13 @@ export function Scenarios({ notify, requestConfirm }: ScenariosProps) {
   }
 
   const q = filter.trim().toLowerCase()
-  const visible = q
-    ? scenarios.filter(s =>
+  const narrowed = q !== '' || metaFilterActive(meta)
+  const visible = narrowed
+    ? scenarios.filter(s => matchesMeta(s, meta) && (!q ||
         s.name.toLowerCase().includes(q) ||
         (s.displayName ?? '').toLowerCase().includes(q) ||
         (s.category ?? '').toLowerCase().includes(q) ||
-        (s.description ?? '').toLowerCase().includes(q))
+        (s.description ?? '').toLowerCase().includes(q)))
     : scenarios
 
   return (
@@ -217,8 +221,9 @@ export function Scenarios({ notify, requestConfirm }: ScenariosProps) {
 
       <div className="card">
         <div className="card-header">
-          <span className="card-title">Scenarios ({visible.length}{q ? ` of ${scenarios.length}` : ''})</span>
+          <span className="card-title">Scenarios ({visible.length}{narrowed ? ` of ${scenarios.length}` : ''})</span>
           <div className="card-tools">
+            {scenarios.length > 0 && <CatalogFilters value={meta} onChange={setMeta} />}
             {scenarios.length > 3 && (
               <span className="search-field">
                 <Icon name="search" size={15} className="search-icon" />
@@ -241,7 +246,9 @@ export function Scenarios({ notify, requestConfirm }: ScenariosProps) {
         {visible.length === 0 ? (
           <div className="empty-state">
             <span className="empty-icon"><Icon name="scenarios" size={24} /></span>
-            {q ? <div>No scenarios match “{filter}”.</div> : <><div>No scenarios found.</div><div className="empty-hint">Scenarios are discovered from <code>scenarios/&lt;name&gt;/scenario.yaml</code>.</div></>}
+            {scenarios.length > 0
+              ? <NoMatches noun="scenarios" search={filter.trim()} filter={meta} onClear={() => { setFilter(''); setMeta(NO_FILTER) }} />
+              : <><div>No scenarios found.</div><div className="empty-hint">Scenarios are discovered from <code>scenarios/&lt;name&gt;/scenario.yaml</code>.</div></>}
           </div>
         ) : (
           <div className="card-body">
@@ -257,6 +264,7 @@ export function Scenarios({ notify, requestConfirm }: ScenariosProps) {
                     )}
                     <div className="scenario-tags">
                       {s.category && <Badge variant="category">{s.category}</Badge>}
+                      <MetaBadges item={s} />
                       {(s.runtimes || []).map(r => (
                         <Badge key={r} variant="runtime">{r}</Badge>
                       ))}

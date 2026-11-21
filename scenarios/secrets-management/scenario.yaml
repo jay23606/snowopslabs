@@ -4,6 +4,9 @@ verified: true
 displayName: "Secrets Management & Rotation"
 description: "A workload mounts a Vault-backed secret that External Secrets keeps in sync. You rotate the value in Vault; it must reach the running pod through ESO and the kubelet with no restart and no redeploy. The grade is what the running container reads from disk."
 category: security
+track: kubernetes
+level: intermediate
+minutes: 35
 prerequisites:
   platform:
     - ingress

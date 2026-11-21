@@ -5,9 +5,11 @@
       "description": "A path with one module",
       "displayName": "Demo path",
       "estimatedMinutes": 0,
+      "level": "intermediate",
       "moduleCount": 1,
       "name": "demo-path",
-      "tags": null
+      "tags": null,
+      "track": "kubernetes"
     }
   ]
 }

@@ -4,6 +4,9 @@ verified: true
 displayName: "Multi-Env Promotion (Dev → Staging → Prod)"
 description: "Run a real release pipeline by hand: build versioned {{.WorkloadName}} images, deploy one to dev, and promote it forward to staging then prod with plain kubectl. Promotion here is a genuine image rollout (new ReplicaSet), not a ConfigMap edit - you build vNEXT, roll it out per environment, and watch each env's /version change as the release moves down the pipeline."
 category: delivery
+track: kubernetes
+level: beginner
+minutes: 30
 prerequisites:
   platform:
     - ingress

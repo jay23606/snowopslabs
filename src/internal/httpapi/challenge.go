@@ -15,6 +15,7 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/scenario"
 	chalsvc "github.com/snowops-oss/snowopslabs/internal/service/challenge"
 	"github.com/snowops-oss/snowopslabs/pkg/checks"
+	schema "github.com/snowops-oss/snowopslabs/pkg/scenario"
 )
 
 func challengeEngine(s *Server) *challenge.Engine {
@@ -26,18 +27,24 @@ func challengeEngine(s *Server) *challenge.Engine {
 }
 
 func (s *Server) handleListChallenges(w http.ResponseWriter, r *http.Request) {
+	f, ok := catalogFilter(w, r)
+	if !ok {
+		return
+	}
 	eng := challengeEngine(s)
 	cs, err := eng.Challenges()
 	if err != nil {
 		respondInternal(w, r, err)
 		return
 	}
+	cs = schema.Select(cs, f)
 	type summary struct {
 		Name        string `json:"name"`
 		DisplayName string `json:"displayName"`
 		Description string `json:"description"`
 		Category    string `json:"category"`
-		ParTime     string `json:"parTime"`
+		schema.Meta
+		ParTime string `json:"parTime"`
 	}
 	out := make([]summary, 0, len(cs))
 	for _, c := range cs {
@@ -46,6 +53,7 @@ func (s *Server) handleListChallenges(w http.ResponseWriter, r *http.Request) {
 			DisplayName: c.DisplayName,
 			Description: c.Description,
 			Category:    c.Category,
+			Meta:        c.Meta,
 			ParTime:     c.ParTime,
 		})
 	}

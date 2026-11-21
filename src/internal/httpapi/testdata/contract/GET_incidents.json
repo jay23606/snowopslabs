@@ -11,6 +11,7 @@
         "type": "script"
       },
       "displayName": "Demo fault",
+      "level": "intermediate",
       "name": "demo-fault",
       "pinnedApps": [],
       "prerequisites": {
@@ -24,6 +25,7 @@
         "namespace": "go-api",
         "workload": "go-api"
       },
+      "track": "kubernetes",
       "verified": false,
       "workload": {
         "app": "go-api",

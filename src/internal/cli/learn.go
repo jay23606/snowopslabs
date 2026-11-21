@@ -10,6 +10,7 @@ import (
 
 	"github.com/snowops-oss/snowopslabs/internal/labcheck"
 	"github.com/snowops-oss/snowopslabs/internal/learn"
+	schema "github.com/snowops-oss/snowopslabs/pkg/scenario"
 	"github.com/spf13/cobra"
 )
 
@@ -41,30 +42,43 @@ func learnEngine() *learn.Engine {
 }
 
 func learnListCmd() *cobra.Command {
-	return &cobra.Command{
+	var cf catalogFlags
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List available learning paths",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			eng := learnEngine()
-			paths, err := eng.Paths()
+			f, err := cf.filter()
 			if err != nil {
 				return err
 			}
-			if len(paths) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No learning paths found.")
+			eng := learnEngine()
+			all, err := eng.Paths()
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if len(all) == 0 {
+				fmt.Fprintln(out, "No learning paths found.")
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%-30s %-8s  %s\n", "PATH", "MODULES", "DESCRIPTION")
-			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", strings.Repeat("-", 72))
+			paths := schema.Select(all, f)
+			if len(paths) == 0 {
+				fmt.Fprintln(out, noMatch("learning paths", f))
+				return nil
+			}
+			fmt.Fprintf(out, "%-30s %-11s %-13s %-4s %-8s  %s\n", "PATH", "TRACK", "LEVEL", "MIN", "MODULES", "DESCRIPTION")
+			fmt.Fprintf(out, "%s\n", strings.Repeat("-", 100))
 			for _, p := range paths {
 				prog, _ := eng.Progress(p.Name)
 				status := progressSummary(p, prog)
-				fmt.Fprintf(cmd.OutOrStdout(), "%-30s %-8s  %s\n",
-					p.Name, status, truncate(p.DisplayName+" - "+p.Description, 60))
+				fmt.Fprintf(out, "%-30s %-11s %-13s %-4s %-8s  %s\n",
+					p.Name, p.Track, p.Level, minutesCell(p.Minutes), status, truncate(p.DisplayName+" - "+p.Description, 60))
 			}
 			return nil
 		},
 	}
+	cf.add(cmd)
+	return cmd
 }
 
 func learnStartCmd() *cobra.Command {
