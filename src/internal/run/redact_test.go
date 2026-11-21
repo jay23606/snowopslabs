@@ -155,3 +155,25 @@ func TestLogSink_NeverStoresRegisteredSecret(t *testing.T) {
 		}
 	}
 }
+
+func TestRedaction_InheritedProcessEnvIsMasked(t *testing.T) {
+	// Scripts inherit labctl's own environment, so a secret exported in the
+	// shell that started labctl reaches them without being in Spec.Env.
+	t.Setenv("PROBE_API_TOKEN", testSecret)
+	h := newHarness(t)
+	h.fake.WhenArgsContainStderr("inherit.sh", "token="+testSecret+"\n", "", 0)
+
+	id, err := h.engine.Submit(context.Background(), Spec{Kind: "test", Script: h.script("inherit.sh")})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	h.waitForStatus(id, store.StatusSucceeded)
+
+	log := h.logText(id)
+	if strings.Contains(log, testSecret) {
+		t.Fatalf("stored log holds an inherited secret:\n%s", log)
+	}
+	if !strings.Contains(log, "[redacted:PROBE_API_TOKEN]") {
+		t.Errorf("inherited secret not masked by name:\n%s", log)
+	}
+}

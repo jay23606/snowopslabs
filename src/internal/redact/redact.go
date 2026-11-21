@@ -7,6 +7,7 @@
 package redact
 
 import (
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -43,6 +44,18 @@ func New(env map[string]string) *Redactor {
 	r := &Redactor{secrets: make(map[string]string)}
 	r.RegisterEnv(env)
 	return r
+}
+
+// ProcessEnv returns labctl's own environment as a map. Child processes
+// inherit it, so its secret-named keys need masking as much as a run's env.
+func ProcessEnv() map[string]string {
+	env := make(map[string]string)
+	for _, kv := range os.Environ() {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			env[k] = v
+		}
+	}
+	return env
 }
 
 // RegisterEnv registers every secret-named key in env.

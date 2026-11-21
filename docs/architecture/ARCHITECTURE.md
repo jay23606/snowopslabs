@@ -199,8 +199,8 @@ strictly monotonic per run. Consumers stream **from a cursor**:
 - Logs are readable after the run finishes, after a restart, forever (subject to
   retention).
 
-**Redaction.** Every `.env` key reaches scripts, so output is masked before it
-is stored or streamed. The log sink (`internal/run`) passes each complete line
+**Redaction.** Scripts see labctl's own environment plus the settings the run
+passes them, so output is masked before it is stored or streamed. The log sink (`internal/run`) passes each complete line
 through a redactor (`internal/redact`) ahead of buffering, step-marker parsing
 and the store write, and the failure message a run records gets the same
 treatment. The web UI executor (`internal/executor`) runs its broadcast lines
@@ -209,8 +209,9 @@ through the same rules.
 - A value is masked when its key ends in `_PASSWORD`, `_TOKEN`, `_KEY` or
   `_SECRET` (any case) and it is 8 or more characters. Each occurrence becomes
   `[redacted:NAME]`. When one secret contains another, the longer is masked.
-- Each run registers the secrets in its `Spec.Env` before it starts, so the
-  mask covers exactly what the script can see. `run.WithRedactor` and
+- Each run registers the secrets in its `Spec.Env` and in labctl's own
+  environment (which every script inherits) before it starts, so the mask
+  covers what the script can see. `run.WithRedactor` and
   `Redactor.Register` add values that are not in the env, such as a connected
   token.
 - Not redacted: values under 8 characters, secrets under other key names,

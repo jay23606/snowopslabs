@@ -92,3 +92,11 @@ func TestConcurrentUse(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestProcessEnvMasksExportedSecrets(t *testing.T) {
+	t.Setenv("PROBE_SHELL_TOKEN", "exported-secret-1")
+	r := New(ProcessEnv())
+	if got := r.Redact("x exported-secret-1 y"); got != "x [redacted:PROBE_SHELL_TOKEN] y" {
+		t.Errorf("Redact = %q", got)
+	}
+}

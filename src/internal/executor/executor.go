@@ -218,6 +218,7 @@ func (e *Executor) runStreamedWith(actionID, actionLabel, cmdStr, name string, a
 func (e *Executor) registerSecrets() {
 	e.envMu.RLock()
 	defer e.envMu.RUnlock()
+	e.Redactor.RegisterEnv(redact.ProcessEnv())
 	e.Redactor.RegisterEnv(e.Env)
 }
 

@@ -35,8 +35,9 @@ trust. See `docs/adr/0008-content-extensibility-seam.md`.
 
 ## Secrets in run output
 
-Scripts receive every `.env` key, so run output is masked before it is stored
-in the run log or streamed to the CLI and UI. A value of 8 or more characters
+Scripts receive labctl's own environment and the settings each run passes
+them, so run output is masked before it is stored in the run log or streamed
+to the CLI and UI. A value of 8 or more characters
 under a key ending in `_PASSWORD`, `_TOKEN`, `_KEY` or `_SECRET` is replaced
 with `[redacted:NAME]`. Redaction is exact-match on text: it does not cover
 shorter values, other key names, secrets a script reads from the cluster or a
