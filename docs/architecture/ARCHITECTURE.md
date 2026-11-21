@@ -199,6 +199,26 @@ strictly monotonic per run. Consumers stream **from a cursor**:
 - Logs are readable after the run finishes, after a restart, forever (subject to
   retention).
 
+**Redaction.** Every `.env` key reaches scripts, so output is masked before it
+is stored or streamed. The log sink (`internal/run`) passes each complete line
+through a redactor (`internal/redact`) ahead of buffering, step-marker parsing
+and the store write, and the failure message a run records gets the same
+treatment. The web UI executor (`internal/executor`) runs its broadcast lines
+through the same rules.
+
+- A value is masked when its key ends in `_PASSWORD`, `_TOKEN`, `_KEY` or
+  `_SECRET` (any case) and it is 8 or more characters. Each occurrence becomes
+  `[redacted:NAME]`. When one secret contains another, the longer is masked.
+- Each run registers the secrets in its `Spec.Env` before it starts, so the
+  mask covers exactly what the script can see. `run.WithRedactor` and
+  `Redactor.Register` add values that are not in the env, such as a connected
+  token.
+- Not redacted: values under 8 characters, secrets under other key names,
+  secrets a script reads from somewhere other than its env (a Kubernetes
+  Secret, a file), encoded or transformed forms (base64, URL-encoded), and a
+  secret split by a line break or by the 64 KiB cut on a line with no newline.
+  Output is masked as text, not scanned for credentials.
+
 ### 3.5 Steps
 
 Long scripts emit step markers (`##snowops:step:<name>`) that the engine

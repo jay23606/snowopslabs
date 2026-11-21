@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/snowops-oss/snowopslabs/internal/redact"
 	"github.com/snowops-oss/snowopslabs/internal/runowner"
 	"github.com/snowops-oss/snowopslabs/internal/store"
 	"github.com/snowops-oss/snowopslabs/internal/toolchain"
@@ -172,6 +173,10 @@ type Engine struct {
 
 	subs *subscribers
 
+	// redactor masks secret values in run output and messages. Each run adds
+	// the secrets in its own env before it starts.
+	redactor *redact.Redactor
+
 	// metrics, when non-nil, receives run-lifecycle signals.
 	metrics Metrics
 
@@ -216,6 +221,16 @@ func WithFinishHook(h FinishHook) Option {
 	return func(e *Engine) {
 		if h != nil {
 			e.finishHooks = append(e.finishHooks, h)
+		}
+	}
+}
+
+// WithRedactor sets the redactor run output passes through, so a caller can
+// register secrets that are not in a run's env, such as a connected token.
+func WithRedactor(r *redact.Redactor) Option {
+	return func(e *Engine) {
+		if r != nil {
+			e.redactor = r
 		}
 	}
 }
@@ -287,6 +302,7 @@ func New(st *store.Store, runner toolchain.Runner, resolver *toolchain.Resolver,
 		cancels:    make(map[string]context.CancelFunc),
 		pending:    make(map[string]struct{}),
 		subs:       newSubscribers(),
+		redactor:   redact.New(nil),
 		shutdown:   make(chan struct{}),
 	}
 	for _, opt := range opts {

@@ -19,6 +19,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/snowops-oss/snowopslabs/internal/redact"
 )
 
 // Executor runs shell scripts from the project, streaming output to the caller.
@@ -32,8 +34,11 @@ type Executor struct {
 	Stdout      io.Writer
 	Stderr      io.Writer
 	Broadcast   *Broadcaster
-	actionSeq   atomic.Int64
-	envMu       sync.RWMutex
+	// Redactor masks secret env values in streamed output. SetEnv registers
+	// into it, and each streamed run registers the current Env.
+	Redactor  *redact.Redactor
+	actionSeq atomic.Int64
+	envMu     sync.RWMutex
 }
 
 // New creates an Executor rooted at projectRoot.
@@ -44,6 +49,7 @@ func New(projectRoot string) *Executor {
 		Stdout:      os.Stdout,
 		Stderr:      os.Stderr,
 		Broadcast:   NewBroadcaster(),
+		Redactor:    redact.New(nil),
 	}
 }
 
@@ -152,6 +158,8 @@ func (e *Executor) runStreamedWith(actionID, actionLabel, cmdStr, name string, a
 		Timestamp: time.Now(),
 	})
 
+	e.registerSecrets()
+
 	cmd := exec.Command(name, args...) //nolint:noctx // provisioning command; process lifecycle handled via streamed Wait, not context
 	cmd.Dir = e.ProjectRoot
 	cmd.Env = e.buildEnv()
@@ -205,6 +213,14 @@ func (e *Executor) runStreamedWith(actionID, actionLabel, cmdStr, name string, a
 	return err
 }
 
+// registerSecrets adds the secrets in Env, including ones set by writing the
+// map directly, to the redactor before a run starts.
+func (e *Executor) registerSecrets() {
+	e.envMu.RLock()
+	defer e.envMu.RUnlock()
+	e.Redactor.RegisterEnv(e.Env)
+}
+
 func (e *Executor) streamOutput(wg *sync.WaitGroup, actionID, actionLabel string, r io.Reader, stream string, w io.Writer) {
 	defer wg.Done()
 	// bufio.Reader, not bufio.Scanner: a Scanner stops at its maximum token size,
@@ -214,7 +230,7 @@ func (e *Executor) streamOutput(wg *sync.WaitGroup, actionID, actionLabel string
 	for {
 		chunk, err := reader.ReadString('\n')
 		if len(chunk) > 0 {
-			line := strings.TrimRight(chunk, "\r\n")
+			line := e.Redactor.Redact(strings.TrimRight(chunk, "\r\n"))
 			fmt.Fprintln(w, line)
 			e.Broadcast.Send(ActionEvent{
 				ID:        actionID,
@@ -294,6 +310,9 @@ func (e *Executor) SetEnv(key, value string) {
 	e.envMu.Lock()
 	defer e.envMu.Unlock()
 	e.Env[key] = value
+	if redact.IsSecretKey(key) {
+		e.Redactor.Register(key, value)
+	}
 }
 
 // CaptureOutput runs a command and returns its stdout as a string.
