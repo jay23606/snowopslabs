@@ -76,6 +76,7 @@ func challengeListCmd() *cobra.Command {
 				return err
 			}
 			out := cmd.OutOrStdout()
+			warnLoadErrors(cmd.ErrOrStderr(), "challenge", eng.LoadErrors())
 			if len(all) == 0 {
 				fmt.Fprintln(out, "No challenges found.")
 				return nil

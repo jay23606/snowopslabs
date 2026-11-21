@@ -188,3 +188,20 @@ func TestScenarioValidate_RejectsBadMeta(t *testing.T) {
 		t.Errorf("Validate() = %v, want the track problem", err)
 	}
 }
+
+func TestParseFilter_IgnoresCase(t *testing.T) {
+	tests := []struct {
+		track, level string
+		want         Filter
+	}{
+		{"Kubernetes", "Advanced", Filter{Track: "kubernetes", Level: "advanced"}},
+		{"CICD", "BEGINNER", Filter{Track: "cicd", Level: "beginner"}},
+		{"K8S", "", Filter{Track: "kubernetes"}},
+	}
+	for _, tt := range tests {
+		got, err := ParseFilter(tt.track, tt.level)
+		if err != nil || got != tt.want {
+			t.Errorf("ParseFilter(%q, %q) = %+v, %v, want %+v", tt.track, tt.level, got, err, tt.want)
+		}
+	}
+}

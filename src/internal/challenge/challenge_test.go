@@ -485,3 +485,25 @@ func TestValidate_SetupRefs(t *testing.T) {
 		})
 	}
 }
+
+func TestChallenges_ReportsWhyAChallengeWasLeftOut(t *testing.T) {
+	e, cDir := makeEngine(t)
+	writeChallengeYAML(t, cDir, "good", validChallengeYAML)
+	writeChallengeYAML(t, cDir, "easy", strings.Replace(validChallengeYAML, "test-challenge", "easy", 1)+"level: easy\n")
+	writeChallengeYAML(t, cDir, "slow", strings.Replace(validChallengeYAML, "test-challenge", "slow", 1)+"minutes: \"~30\"\n")
+	if err := os.MkdirAll(filepath.Join(cDir, "not-a-challenge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cs, err := e.Challenges()
+	if err != nil || len(cs) != 1 {
+		t.Fatalf("Challenges() = %d, %v, want only the valid one", len(cs), err)
+	}
+	errs := e.LoadErrors()
+	if len(errs) != 2 {
+		t.Fatalf("LoadErrors() = %v, want easy and slow", errs)
+	}
+	if got := errs["easy"]; got == nil || !strings.Contains(got.Error(), `level "easy" is not a known level (use beginner, intermediate or advanced)`) {
+		t.Errorf("easy error = %v, want the level and the accepted values", got)
+	}
+}

@@ -13,7 +13,7 @@
     "category": { "type": "string" },
     "track": { "type": "string", "enum": ["kubernetes", "cicd", "iac"], "description": "Area of platform work. Absent means kubernetes." },
     "level": { "type": "string", "enum": ["beginner", "intermediate", "advanced"], "description": "Difficulty. Absent means intermediate." },
-    "minutes": { "type": "integer", "minimum": 1, "description": "Expected time in minutes." },
+    "minutes": { "type": "integer", "minimum": 0, "description": "Expected time in minutes. 0 means not stated." },
     "parTime": { "type": "string", "description": "Target time, e.g. \"12m\" (Go duration)." },
     "hintPenalty": { "type": "integer", "minimum": 0, "maximum": 100, "description": "Percent score deducted per revealed hint (default 5)." },
     "setup": {

@@ -249,3 +249,30 @@ func TestCatalogFilters_CLIJSON(t *testing.T) {
 		})
 	}
 }
+
+func TestCatalogFilters_IgnoreCase(t *testing.T) {
+	l := newTerminal(t)
+	writeTrackedContent(t, l)
+	r := l.run("scenario", "list", "--track", "CICD", "--level", "Beginner")
+	if r.err != nil || !strings.Contains(r.stdout, "pipeline-cache ") || strings.Contains(r.stdout, labtest.Scenario+" ") {
+		t.Errorf("--track CICD --level Beginner should list pipeline-cache only, err=%v\n%s", r.err, r.stdout)
+	}
+}
+
+func TestCatalogLists_WarnAboutInvalidItems(t *testing.T) {
+	l := newTerminal(t)
+	l.Write(t, "challenges/bad-level/challenge.yaml", "name: bad-level\ndisplayName: Bad\ndescription: x\ncategory: workload\nlevel: easy\n")
+	l.Write(t, "learn/bad-minutes/path.yaml", "name: bad-minutes\ndisplayName: Bad\ndescription: x\nminutes: \"~30\"\nmodules: []\n")
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"challenge", "list"}, "challenge bad-level failed to load and is not listed"},
+		{[]string{"learn", "list"}, "learning path bad-minutes failed to load and is not listed"},
+	} {
+		r := l.run(tc.args...)
+		if !strings.Contains(r.stderr, tc.want) {
+			t.Errorf("%v stderr = %q, want it to contain %q", tc.args, r.stderr, tc.want)
+		}
+	}
+}

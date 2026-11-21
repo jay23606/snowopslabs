@@ -5,6 +5,8 @@ package cli
 import (
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -58,4 +60,13 @@ func minutesCell(m int) string {
 		return "-"
 	}
 	return strconv.Itoa(m)
+}
+
+// warnLoadErrors tells the reader which items a list left out because they
+// failed to load, one line each with the reason and the fix. It writes
+// nothing when every item loaded.
+func warnLoadErrors(w io.Writer, kind string, errs map[string]error) {
+	for _, key := range slices.Sorted(maps.Keys(errs)) {
+		fmt.Fprintf(w, "Warning: %s %s failed to load and is not listed: %v\n", kind, key, errs[key])
+	}
 }

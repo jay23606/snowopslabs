@@ -9,10 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/snowops-oss/snowopslabs/internal/results"
@@ -179,6 +181,9 @@ type Engine struct {
 	stateDir   string
 	resultsDir string // directory for the unified results store (empty = disabled)
 	now        func() string
+
+	mu         sync.Mutex
+	loadErrors map[string]error // path directory name → why it failed to load
 }
 
 // New creates an Engine rooted at learnDir with progress persisted in stateDir.
@@ -192,7 +197,8 @@ func New(learnDir, stateDir, resultsDir string) *Engine {
 	}
 }
 
-// Paths returns all valid learning paths discovered under learnDir.
+// Paths returns all valid learning paths discovered under learnDir. A path
+// that fails to load is left out and reported by LoadErrors.
 func (e *Engine) Paths() ([]*Path, error) {
 	entries, err := os.ReadDir(e.learnDir)
 	if err != nil {
@@ -202,17 +208,33 @@ func (e *Engine) Paths() ([]*Path, error) {
 		return nil, err
 	}
 	var paths []*Path
+	failed := make(map[string]error)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		p, err := e.LoadPath(entry.Name())
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // a directory without path.yaml is not a path
+		}
 		if err != nil {
-			continue // skip malformed paths silently
+			failed[entry.Name()] = err
+			continue
 		}
 		paths = append(paths, p)
 	}
+	e.mu.Lock()
+	e.loadErrors = failed
+	e.mu.Unlock()
 	return paths, nil
+}
+
+// LoadErrors returns the paths the last Paths call skipped, keyed by
+// directory name, each with the reason and the fix.
+func (e *Engine) LoadErrors() map[string]error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return maps.Clone(e.loadErrors)
 }
 
 // LoadPath loads and validates a single path by name.

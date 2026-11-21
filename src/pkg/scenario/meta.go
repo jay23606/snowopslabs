@@ -95,10 +95,13 @@ type Filter struct {
 var trackAliases = map[string]string{"k8s": "kubernetes"}
 
 // ParseFilter checks the values of a --track or ?track= filter, so a typo is
-// an error that names the valid values instead of an empty list. A track alias
-// such as k8s is normalised to its id.
+// an error that names the valid values instead of an empty list. Case is
+// ignored, and a track alias such as k8s is normalised to its id.
 func ParseFilter(track, level string) (Filter, error) {
-	f := Filter{Track: strings.TrimSpace(track), Level: strings.TrimSpace(level)}
+	f := Filter{
+		Track: strings.ToLower(strings.TrimSpace(track)),
+		Level: strings.ToLower(strings.TrimSpace(level)),
+	}
 	if id, ok := trackAliases[f.Track]; ok {
 		f.Track = id
 	}

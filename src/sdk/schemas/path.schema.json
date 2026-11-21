@@ -13,7 +13,7 @@
     "tags": { "type": "array", "items": { "type": "string" } },
     "track": { "type": "string", "enum": ["kubernetes", "cicd", "iac"], "description": "Area of platform work. Absent means kubernetes." },
     "level": { "type": "string", "enum": ["beginner", "intermediate", "advanced"], "description": "Difficulty. Absent means intermediate." },
-    "minutes": { "type": "integer", "minimum": 1, "description": "Expected time in minutes." },
+    "minutes": { "type": "integer", "minimum": 0, "description": "Expected time in minutes. 0 means not stated." },
     "estimatedMinutes": { "type": "integer", "minimum": 0, "description": "Alias of minutes. Set one of them." },
     "modules": {
       "type": "array",

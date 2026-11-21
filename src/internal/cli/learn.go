@@ -57,6 +57,7 @@ func learnListCmd() *cobra.Command {
 				return err
 			}
 			out := cmd.OutOrStdout()
+			warnLoadErrors(cmd.ErrOrStderr(), "learning path", eng.LoadErrors())
 			if len(all) == 0 {
 				fmt.Fprintln(out, "No learning paths found.")
 				return nil

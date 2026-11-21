@@ -10,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/snowops-oss/snowopslabs/internal/results"
@@ -174,6 +176,9 @@ type Engine struct {
 	stateDir     string
 	resultsDir   string // directory for the unified results store
 	now          func() time.Time
+
+	mu         sync.Mutex
+	loadErrors map[string]error // challenge directory name → why it failed to load
 }
 
 // New creates an Engine. resultsDir is the directory holding results.jsonl
@@ -187,7 +192,8 @@ func New(challengeDir, stateDir, resultsDir string) *Engine {
 	}
 }
 
-// Challenges returns all valid challenges.
+// Challenges returns all valid challenges. A challenge that fails to load is
+// left out and reported by LoadErrors.
 func (e *Engine) Challenges() ([]*Challenge, error) {
 	entries, err := os.ReadDir(e.challengeDir)
 	if err != nil {
@@ -197,17 +203,33 @@ func (e *Engine) Challenges() ([]*Challenge, error) {
 		return nil, err
 	}
 	var out []*Challenge
+	failed := make(map[string]error)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		c, err := e.Load(entry.Name())
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // a directory without challenge.yaml is not a challenge
+		}
 		if err != nil {
+			failed[entry.Name()] = err
 			continue
 		}
 		out = append(out, c)
 	}
+	e.mu.Lock()
+	e.loadErrors = failed
+	e.mu.Unlock()
 	return out, nil
+}
+
+// LoadErrors returns the challenges the last Challenges call skipped, keyed
+// by directory name, each with the reason and the fix.
+func (e *Engine) LoadErrors() map[string]error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return maps.Clone(e.loadErrors)
 }
 
 // Load loads and validates a single challenge by name.
