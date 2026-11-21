@@ -149,7 +149,7 @@ func (e *Executor) runStreamed(actionLabel, cmdStr, name string, args ...string)
 }
 
 func (e *Executor) runStreamedWith(actionID, actionLabel, cmdStr, name string, args ...string) error {
-	slog.Debug("action start", "action", actionLabel, "cmd", cmdStr, "id", actionID)
+	slog.Debug("action start", "action", actionLabel, "cmd", e.Redactor.Redact(cmdStr), "id", actionID)
 	e.registerSecrets()
 	e.send(ActionEvent{
 		ID:        actionID,
@@ -198,7 +198,7 @@ func (e *Executor) runStreamedWith(actionID, actionLabel, cmdStr, name string, a
 		errStr = err.Error()
 	}
 
-	slog.Debug("action end", "action", actionLabel, "id", actionID, "exitCode", exitCode, "err", errStr)
+	slog.Debug("action end", "action", actionLabel, "id", actionID, "exitCode", exitCode, "err", e.Redactor.Redact(errStr))
 	e.send(ActionEvent{
 		ID:        actionID,
 		Type:      "action_end",
