@@ -9,6 +9,7 @@
       "type": "script"
     },
     "displayName": "Demo fault",
+    "level": "intermediate",
     "name": "demo-fault",
     "prerequisites": {
       "apps": [
@@ -21,6 +22,7 @@
       "namespace": "demo-app",
       "workload": "demo-app"
     },
+    "track": "kubernetes",
     "verified": false
   },
   "silent": false,

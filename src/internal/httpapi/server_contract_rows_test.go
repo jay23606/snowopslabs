@@ -60,7 +60,8 @@ var contract = []contractRow{
 		badPath: "/platform/component/ingress/ghost/down", problem: "not_found", code: http.StatusNotFound},
 
 	// ── scenarios ──
-	{method: get, route: "/scenarios", status: ok},
+	{method: get, route: "/scenarios", status: ok,
+		badPath: "/scenarios?track=kube", problem: "invalid_request", code: http.StatusBadRequest},
 	{method: get, route: "/scenarios/{name}", path: "/scenarios/demo-scenario", status: ok,
 		badPath: "/scenarios/ghost", problem: "not_found", code: http.StatusNotFound},
 	{method: post, route: "/scenarios/{name}/up", path: "/scenarios/demo-scenario/up", status: accept,
@@ -71,7 +72,8 @@ var contract = []contractRow{
 		badPath: "/scenarios/ghost/verify", problem: "not_found", code: http.StatusNotFound},
 
 	// ── incidents ──
-	{method: get, route: "/incidents", status: ok},
+	{method: get, route: "/incidents", status: ok,
+		badPath: "/incidents?level=easy", problem: "invalid_request", code: http.StatusBadRequest},
 	{method: get, route: "/incidents/status", status: ok},
 	{method: get, route: "/incidents/history", status: ok, prepare: playedLab},
 	{method: post, route: "/incidents/{name}/inject", path: "/incidents/demo-fault/inject?app=demo-app", status: ok, operatorOnly: true,
@@ -106,7 +108,8 @@ var contract = []contractRow{
 		badPath: "/comparisons/ghost", problem: "not_found", code: http.StatusNotFound},
 
 	// ── challenges ──
-	{method: get, route: "/challenges", status: ok},
+	{method: get, route: "/challenges", status: ok,
+		badPath: "/challenges?track=kube", problem: "invalid_request", code: http.StatusBadRequest},
 	{method: get, route: "/challenges/status", status: ok},
 	{method: get, route: "/challenges/history", status: ok, prepare: playedLab},
 	{method: get, route: "/challenges/{name}", path: "/challenges/demo-challenge", status: ok,
@@ -115,7 +118,8 @@ var contract = []contractRow{
 		problem: "no_active_challenge", code: http.StatusConflict},
 
 	// ── learning paths ──
-	{method: get, route: "/learn/paths", status: ok},
+	{method: get, route: "/learn/paths", status: ok,
+		badPath: "/learn/paths?level=easy", problem: "invalid_request", code: http.StatusBadRequest},
 	{method: get, route: "/learn/paths/{name}", path: "/learn/paths/demo-path", status: ok,
 		badPath: "/learn/paths/ghost", problem: "not_found", code: http.StatusNotFound},
 	{method: get, route: "/learn/paths/{name}/progress", path: "/learn/paths/demo-path/progress", status: ok,

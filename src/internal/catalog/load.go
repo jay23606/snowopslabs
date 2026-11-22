@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -102,9 +103,10 @@ func (c *Catalog) loadScenario(dirName, file string, doc *yaml.Node) {
 		return
 	}
 	s.Dir = filepath.Dir(file)
+	s.ApplyDefaults()
 	c.checkName(KindScenario, dirName, s.Name, file, doc)
 	if err := s.Validate(); err != nil {
-		c.problems = append(c.problems, Problem{Kind: KindScenario, Name: nameOr(s.Name, dirName), File: file, Message: err.Error()})
+		c.problems = append(c.problems, Problem{Kind: KindScenario, Name: nameOr(s.Name, dirName), File: file, Line: metaLine(doc, err.Error()), Message: err.Error()})
 	}
 	// Reject unknown capabilities now; a misspelt one could never be met.
 	for _, name := range s.Prerequisites.Capabilities {
@@ -128,9 +130,10 @@ func (c *Catalog) loadIncident(dirName, file string, doc *yaml.Node) {
 		return
 	}
 	f.Dir = filepath.Dir(file)
+	f.ApplyDefaults()
 	c.checkName(KindIncident, dirName, f.Name, file, doc)
 	if err := f.Validate(); err != nil {
-		c.problems = append(c.problems, Problem{Kind: KindIncident, Name: nameOr(f.Name, dirName), File: file, Message: err.Error()})
+		c.problems = append(c.problems, Problem{Kind: KindIncident, Name: nameOr(f.Name, dirName), File: file, Line: metaLine(doc, err.Error()), Message: err.Error()})
 	}
 	c.index(KindIncident, dirName, file, doc, func() { c.incidents[dirName] = &f })
 }
@@ -141,9 +144,10 @@ func (c *Catalog) loadPath(dirName, file string, doc *yaml.Node) {
 		c.problems = append(c.problems, Problem{Kind: KindPath, Name: dirName, File: file, Message: "decoding: " + err.Error()})
 		return
 	}
+	p.Normalize()
 	c.checkName(KindPath, dirName, p.Name, file, doc)
 	for _, msg := range p.Validate() {
-		c.problems = append(c.problems, Problem{Kind: KindPath, Name: nameOr(p.Name, dirName), File: file, Message: msg})
+		c.problems = append(c.problems, Problem{Kind: KindPath, Name: nameOr(p.Name, dirName), File: file, Line: metaLine(doc, msg), Message: msg})
 	}
 	c.index(KindPath, dirName, file, doc, func() { c.paths[dirName] = &p })
 }
@@ -154,9 +158,10 @@ func (c *Catalog) loadChallenge(dirName, file string, doc *yaml.Node) {
 		c.problems = append(c.problems, Problem{Kind: KindChallenge, Name: dirName, File: file, Message: "decoding: " + err.Error()})
 		return
 	}
+	ch.ApplyDefaults()
 	c.checkName(KindChallenge, dirName, ch.Name, file, doc)
 	for _, msg := range ch.Validate() {
-		c.problems = append(c.problems, Problem{Kind: KindChallenge, Name: nameOr(ch.Name, dirName), File: file, Message: msg})
+		c.problems = append(c.problems, Problem{Kind: KindChallenge, Name: nameOr(ch.Name, dirName), File: file, Line: metaLine(doc, msg), Message: msg})
 	}
 	c.index(KindChallenge, dirName, file, doc, func() { c.challenges[dirName] = &ch })
 }
@@ -187,6 +192,35 @@ func nameOr(name, fallback string) string {
 		return name
 	}
 	return fallback
+}
+
+// metaFields maps the start of each track, level and minutes problem message
+// to the YAML key it is about.
+var metaFields = []struct{ prefix, key string }{
+	{"track \"", "track"},
+	{"level \"", "level"},
+	{"minutes ", "minutes"},
+	{"estimatedMinutes ", "estimatedMinutes"},
+}
+
+// metaLine returns the line of the track, level or minutes key that a
+// validation message is about, or 0 when it is about something else.
+func metaLine(doc *yaml.Node, msg string) int {
+	if doc == nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return 0
+	}
+	for _, f := range metaFields {
+		if !strings.Contains(msg, f.prefix) {
+			continue
+		}
+		top := doc.Content[0].Content
+		for i := 0; i+1 < len(top); i += 2 {
+			if top[i].Value == f.key {
+				return top[i].Line
+			}
+		}
+	}
+	return 0
 }
 
 // lineOfValue returns the 1-based line of the first scalar node in doc whose

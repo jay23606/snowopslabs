@@ -6,6 +6,9 @@ description: >
   and Ready, and nothing was deployed. Find the root cause and confirm the
   SLO recovers.
 category: network
+track: kubernetes
+level: advanced
+minutes: 10
 parTime: "6m"
 setup:
   type: incident

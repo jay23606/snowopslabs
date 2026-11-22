@@ -4,6 +4,9 @@ verified: true
 displayName: "Day-2 Drill: Rolling Cluster Upgrade Under Load"
 description: "Roll the cluster's worker nodes onto a new Kubernetes version one at a time while {{.WorkloadName}} serves live traffic. You write the PodDisruptionBudget, you cordon and drain each node, and you watch the PDB block the eviction that would have taken the app down. The grade is the measured request success rate across the upgrade window and a cluster left with no node behind."
 category: operations
+track: kubernetes
+level: advanced
+minutes: 60
 prerequisites:
   platform:
     - ingress

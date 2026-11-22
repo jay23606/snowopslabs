@@ -6,9 +6,9 @@ response) with machine-verifiable completion checks at every step.
 
 ## Shipped paths
 
-| Path | Modules | Est. | What it covers |
-|------|---------|------|----------------|
-| `kubernetes-foundations` | 4 | 45m | Cluster up, deploy an app with Helm, enable observability, then diagnose and hand-fix a real fault |
+| Path | Modules | Level | Time | What it covers |
+|------|---------|-------|------|----------------|
+| `kubernetes-foundations` | 4 | beginner | 45m | Cluster up, deploy an app with Helm, enable observability, then diagnose and hand-fix a real fault |
 
 Written for someone starting from no cluster. On a lab that is already running,
 the first two modules pass immediately - that is expected, and the path says so.
@@ -30,7 +30,9 @@ name: kubernetes-foundations     # must match directory name
 displayName: "Kubernetes Foundations"
 description: "A short description shown in `labctl learn list`."
 tags: [kubernetes, observability]
-estimatedMinutes: 45             # informational
+track: kubernetes                # kubernetes | cicd | iac; default kubernetes
+level: beginner                  # beginner | intermediate | advanced; default intermediate
+minutes: 45                      # informational; estimatedMinutes is accepted as an alias
 
 modules:
   - name: init-cluster           # unique within the path
@@ -83,7 +85,7 @@ prove the path teaches. The
 [learning review](../docs/authoring/learning-review.md) workflow does: it walks
 the path cold on a live lab, runs every module's check *before* the module's
 work to catch checks that are already green, times the walk against
-`estimatedMinutes`, and scores the result out of 5. Below 4.8, the path is still
+`minutes`, and scores the result out of 5. Below 4.8, the path is still
 a draft.
 
 ## Rules for path authors

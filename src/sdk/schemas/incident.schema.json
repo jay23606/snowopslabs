@@ -20,6 +20,9 @@
       "enum": ["workload", "network", "resources", "storage", "config"]
     },
     "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+    "track": { "type": "string", "enum": ["kubernetes", "cicd", "iac"], "description": "Area of platform work. Absent means kubernetes." },
+    "level": { "type": "string", "enum": ["beginner", "intermediate", "advanced"], "description": "Difficulty. Absent means intermediate." },
+    "minutes": { "type": "integer", "minimum": 0, "description": "Expected time in minutes. 0 means not stated." },
     "target": {
       "type": "object",
       "required": ["namespace", "workload"],

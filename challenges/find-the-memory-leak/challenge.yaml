@@ -6,6 +6,9 @@ description: >
   over once traffic arrived. It is still restarting now. Stop it, and leave
   the workload able to serve the traffic it is getting.
 category: resources
+track: kubernetes
+level: beginner
+minutes: 10
 parTime: "8m"
 setup:
   type: incident

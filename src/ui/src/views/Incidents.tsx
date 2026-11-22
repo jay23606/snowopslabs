@@ -13,6 +13,8 @@ import { qk } from '../lib/queryClient'
 import { useApiQuery } from '../hooks/useApiQuery'
 import type { Fault, IncidentList, IncidentStatus, IncidentHint, NotifyFn } from '../types'
 import { Badge } from '../components/Badge'
+import { CatalogFilters, MetaBadges, NoMatches } from '../components/CatalogMeta'
+import { NO_FILTER, matchesMeta, metaFilterActive, type CatalogFilter } from '../lib/catalog'
 import { ErrorState } from '../components/ErrorState'
 import { Icon } from '../components/Icon'
 import { WorkloadPicker } from '../components/WorkloadPicker'
@@ -70,6 +72,7 @@ export function Incidents({ notify, requestConfirm, canOperate = true }: Inciden
   const active = data?.active ?? null
 
   const [filter, setFilter] = useState('')
+  const [meta, setMeta] = useState<CatalogFilter>(NO_FILTER)
   const [busy, setBusy] = useState<string | null>(null)
   const [status, setStatus] = useState<IncidentStatus | null>(null)
   const [checking, setChecking] = useState(false)
@@ -265,12 +268,13 @@ export function Incidents({ notify, requestConfirm, canOperate = true }: Inciden
   }
 
   const q = filter.trim().toLowerCase()
-  const visible = q
-    ? faults.filter(f =>
+  const narrowed = q !== '' || metaFilterActive(meta)
+  const visible = narrowed
+    ? faults.filter(f => matchesMeta(f, meta) && (!q ||
         f.name.toLowerCase().includes(q) ||
         (f.displayName ?? '').toLowerCase().includes(q) ||
         (f.category ?? '').toLowerCase().includes(q) ||
-        (f.description ?? '').toLowerCase().includes(q))
+        (f.description ?? '').toLowerCase().includes(q)))
     : faults
 
   const activeFault = active ? faults.find(f => f.name === active.fault) ?? null : null
@@ -375,8 +379,9 @@ export function Incidents({ notify, requestConfirm, canOperate = true }: Inciden
       {/* Fault library */}
       <div className="card">
         <div className="card-header">
-          <span className="card-title">Incident library ({visible.length}{q ? ` of ${faults.length}` : ''})</span>
+          <span className="card-title">Incident library ({visible.length}{narrowed ? ` of ${faults.length}` : ''})</span>
           <div className="card-tools">
+            {faults.length > 0 && <CatalogFilters value={meta} onChange={setMeta} />}
             <span className="search-field">
               <Icon name="search" size={15} className="search-icon" />
               <input
@@ -399,7 +404,7 @@ export function Incidents({ notify, requestConfirm, canOperate = true }: Inciden
             <span className="empty-icon"><Icon name="incidents" size={24} /></span>
             {faults.length === 0
               ? <><div>No incidents found.</div><div className="empty-hint">Faults are discovered from <code>incidents/&lt;name&gt;/fault.yaml</code>.</div></>
-              : <div>No incidents match “{filter}”.</div>}
+              : <NoMatches noun="incidents" search={filter.trim()} filter={meta} onClear={() => { setFilter(''); setMeta(NO_FILTER) }} />}
           </div>
         ) : (
           <div className="card-body">
@@ -422,6 +427,7 @@ export function Incidents({ notify, requestConfirm, canOperate = true }: Inciden
                     <div className="scenario-tags">
                       <Badge variant="category">{f.category}</Badge>
                       <Badge variant={SEVERITY_VARIANT[f.severity] ?? 'category'}>{f.severity}</Badge>
+                      <MetaBadges item={f} />
                     </div>
                     {requiresLabel(f) && (
                       <div className="scenario-meta">Requires: {requiresLabel(f)}</div>

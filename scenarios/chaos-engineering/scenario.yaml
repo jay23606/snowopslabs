@@ -4,6 +4,9 @@ verified: true
 displayName: "Chaos Engineering"
 description: "Run the chaos engineering loop against {{.WorkloadName}} with Chaos Mesh: establish a steady state under load, form a hypothesis, inject a failure (pod kill, network delay, CPU and memory stress) and measure the blast radius on a Grafana dashboard. {{.WorkloadName}} ships as a single replica behind a PodDisruptionBudget, so it starts out with disruptionsAllowed=0: a node drain would block forever while a pod kill is still a full outage. Your job is to find that with an experiment and fix it, then prove the same experiment no longer hurts."
 category: reliability
+track: kubernetes
+level: advanced
+minutes: 45
 prerequisites:
   platform:
     - ingress

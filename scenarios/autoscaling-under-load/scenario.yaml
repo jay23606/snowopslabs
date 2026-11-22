@@ -4,6 +4,9 @@ verified: true
 displayName: "Autoscaling Under Load"
 description: "Watch KEDA scale {{.WorkloadName}} on Prometheus RPS: a spike drives it from 1 to several replicas, then cooldown brings it back. The flagship 'autoscaling actually works' demo, verified under traffic from the load generator."
 category: scalability
+track: kubernetes
+level: intermediate
+minutes: 30
 prerequisites:
   platform:
     - ingress

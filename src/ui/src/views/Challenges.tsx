@@ -4,6 +4,8 @@ import { qk } from '../lib/queryClient'
 import { useApiQuery } from '../hooks/useApiQuery'
 import type { ChallengeRunRecord, NotifyFn } from '../types'
 import { Badge } from '../components/Badge'
+import { CatalogFilters, MetaBadges, NoMatches } from '../components/CatalogMeta'
+import { NO_FILTER, matchesMeta, metaFilterActive, type CatalogFilter } from '../lib/catalog'
 import { ErrorState } from '../components/ErrorState'
 import { Icon } from '../components/Icon'
 import type { ConfirmRequest } from '../components/ConfirmDialog'
@@ -35,6 +37,8 @@ export function Challenges({ notify: _notify }: ChallengesProps) {
     return { challenges: list ?? [], status: st, history: hist ?? [] }
   })
   const challenges = data?.challenges ?? []
+  const [meta, setMeta] = useState<CatalogFilter>(NO_FILTER)
+  const visible = challenges.filter(c => matchesMeta(c, meta))
   const status = data?.status ?? null
   const history = data?.history ?? []
 
@@ -145,21 +149,25 @@ export function Challenges({ notify: _notify }: ChallengesProps) {
       {/* Challenge list */}
       <div className="card">
         <div className="card-header">
-          <span className="card-title">Challenges ({challenges.length})</span>
-          <button className="btn btn-sm" onClick={load} disabled={refreshing}>
-            <Icon name="refresh" size={14} />{refreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <span className="card-title">Challenges ({visible.length}{metaFilterActive(meta) ? ` of ${challenges.length}` : ''})</span>
+          <div className="card-tools">
+            {challenges.length > 0 && <CatalogFilters value={meta} onChange={setMeta} />}
+            <button className="btn btn-sm" onClick={load} disabled={refreshing}>
+              <Icon name="refresh" size={14} />{refreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
-        {challenges.length === 0 ? (
+        {visible.length === 0 ? (
           <div className="empty-state">
             <span className="empty-icon"><Icon name="challenges" size={24} /></span>
-            <div>No challenges found.</div>
-            <div className="empty-hint">Challenges are discovered from <code>challenges/&lt;name&gt;/challenge.yaml</code>.</div>
+            {challenges.length > 0
+              ? <NoMatches noun="challenges" search="" filter={meta} onClear={() => setMeta(NO_FILTER)} />
+              : <><div>No challenges found.</div><div className="empty-hint">Challenges are discovered from <code>challenges/&lt;name&gt;/challenge.yaml</code>.</div></>}
           </div>
         ) : (
           <div className="card-body">
-            {challenges.map(c => {
+            {visible.map(c => {
               const isActive = status?.active && status.challenge === c.name
               const best = history
                 .filter(r => r.challenge === c.name && r.outcome === 'passed')
@@ -175,6 +183,7 @@ export function Challenges({ notify: _notify }: ChallengesProps) {
                     )}
                     <div className="scenario-tags">
                       {c.category && <Badge variant="category">{c.category}</Badge>}
+                      <MetaBadges item={c} />
                       <span className="hint-text">par {c.parTime}</span>
                       {best && (
                         <span className="hint-text">· best score: <strong className="value">{best.score}</strong></span>

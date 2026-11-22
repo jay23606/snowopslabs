@@ -25,6 +25,7 @@
     "tips": null,
     "urls": []
   },
+  "level": "intermediate",
   "name": "demo-scenario",
   "pinnedApps": [],
   "prerequisites": {
@@ -33,6 +34,7 @@
   },
   "requirements": {},
   "runtimes": null,
+  "track": "kubernetes",
   "verified": false,
   "workload": {
     "app": "go-api",

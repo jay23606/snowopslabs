@@ -4,6 +4,9 @@ verified: true
 displayName: "Security & Compliance (Audit → Enforce)"
 description: "Take a cluster from 'policies exist' to 'policies bite'. Kyverno ships four Pod Security and best-practice ClusterPolicies in Audit mode, so nothing is blocked and every violation lands in a policy report. Your job is the part a real team owns: read the report, remediate the workload at the source, promote the policies to Enforce, prove the admission webhook now rejects a non-compliant Pod, and issue a real TLS certificate from the lab CA with cert-manager - on a namespace that is default-deny in both directions."
 category: security
+track: kubernetes
+level: advanced
+minutes: 60
 prerequisites:
   platform:
     - ingress

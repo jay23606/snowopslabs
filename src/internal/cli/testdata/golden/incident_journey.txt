@@ -1,6 +1,6 @@
 $ labctl incident list
-NAME         CATEGORY   SEVERITY   TARGET              STATUS
-demo-fault   workload   low        demo-app/demo-app
+NAME         TRACK        LEVEL          MIN   CATEGORY   SEVERITY   TARGET              STATUS
+demo-fault   kubernetes   intermediate   -     workload   low        demo-app/demo-app
 
 $ labctl incident list -o json
 [
@@ -11,6 +11,8 @@ $ labctl incident list -o json
     "verified": false,
     "category": "workload",
     "severity": "low",
+    "track": "kubernetes",
+    "level": "intermediate",
     "target": {
       "namespace": "demo-app",
       "workload": "demo-app"
@@ -35,6 +37,8 @@ $ labctl incident info demo-fault
 Name:        demo-fault
 Display:     Demo fault
 Category:    workload
+Track:       Kubernetes
+Level:       Intermediate
 Severity:    low
 Target:      demo-app/demo-app
 Description: demo-app is broken
@@ -62,8 +66,8 @@ Next steps:
   labctl incident resolve   # escape hatch - undo the fault
 
 $ labctl incident list
-NAME         CATEGORY   SEVERITY   TARGET              STATUS
-demo-fault   workload   low        demo-app/demo-app   ACTIVE
+NAME         TRACK        LEVEL          MIN   CATEGORY   SEVERITY   TARGET              STATUS
+demo-fault   kubernetes   intermediate   -     workload   low        demo-app/demo-app   ACTIVE
 
 $ labctl incident list -o json
 [
@@ -74,6 +78,8 @@ $ labctl incident list -o json
     "verified": false,
     "category": "workload",
     "severity": "low",
+    "track": "kubernetes",
+    "level": "intermediate",
     "target": {
       "namespace": "demo-app",
       "workload": "demo-app"

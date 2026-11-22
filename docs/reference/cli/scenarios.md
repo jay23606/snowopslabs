@@ -10,6 +10,7 @@ what ships is [scenarios](../../scenarios.md).
 ```bash
 labctl scenario list                        # names, categories, active state
 labctl scenario list -o json                # the same as a JSON array, for scripts
+labctl scenario list --track cicd --level beginner   # only that track and level
 labctl scenario info observability-sre      # description, prerequisites, components, hints
 labctl scenario up observability-sre        # activate: install every declared component
 labctl scenario down observability-sre      # deactivate: remove them
@@ -18,10 +19,24 @@ labctl scenario status                      # which scenarios are active
 
 `scenario list -o json` (`--output json`) prints only a JSON array on stdout,
 one object per scenario with the fields `GET /api/v2/scenarios` returns:
-`name`, `displayName`, `description`, `category`, `runtimes`, `active` and
-`app`. Load warnings go to stderr, so `labctl scenario list -o json | jq`
-works. The default, `-o table`, is the table above; any other value is an
-error that lists the two.
+`name`, `displayName`, `description`, `category`, `track`, `level`, `minutes`
+(left out when the scenario states no time), `runtimes`, `active` and `app`.
+Load warnings go to stderr, so `labctl scenario list -o json | jq` works. The
+default, `-o table`, is the table above; any other value is an error that lists
+the two.
+
+`--track` (`kubernetes`, `cicd` or `iac`) and `--level` (`beginner`,
+`intermediate` or `advanced`) keep only the scenarios that match both, in the
+table and in JSON. An unknown value is an error that lists the valid ones, and a
+filter that matches nothing prints a line such as `No scenarios on the CI/CD
+track at Advanced level yet.` in the table and `[]` in JSON. `--track k8s` is
+accepted for `kubernetes`. `GET /api/v2/scenarios` takes the same values as `?track=` and
+`?level=`, applied before `limit` and `cursor`; an unknown value is a 400
+`invalid_request`. See [Track, level and minutes](../scenario-schema.md#track-level-and-minutes).
+
+`scenario info` shows `Track:`, `Level:` and `Time:` (for example `~20 min`,
+left out when the scenario states none) under `Category:`. `incident info` and
+`challenge info` show the same lines.
 
 `scenario info` on an active scenario describes it for the app it was activated
 with, so its manifests, snippets and commands name that app, not the default.

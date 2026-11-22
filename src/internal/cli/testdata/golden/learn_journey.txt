@@ -1,8 +1,8 @@
 $ labctl learn list
-PATH                           MODULES   DESCRIPTION
-------------------------------------------------------------------------
-course                         0/2       Course - Two modules
-demo-path                      0/1       Demo path - A path with one module
+PATH                           TRACK       LEVEL         MIN  MODULES   DESCRIPTION
+----------------------------------------------------------------------------------------------------
+course                         kubernetes  intermediate  -    0/2       Course - Two modules
+demo-path                      kubernetes  intermediate  -    0/1       Demo path - A path with one module
 
 $ labctl learn progress course
 Course  0/2 modules
@@ -69,10 +69,10 @@ Course  2/2 modules
   [✓] 2. Nothing to do
 
 $ labctl learn list
-PATH                           MODULES   DESCRIPTION
-------------------------------------------------------------------------
-course                         2/2       Course - Two modules
-demo-path                      0/1       Demo path - A path with one module
+PATH                           TRACK       LEVEL         MIN  MODULES   DESCRIPTION
+----------------------------------------------------------------------------------------------------
+course                         kubernetes  intermediate  -    2/2       Course - Two modules
+demo-path                      kubernetes  intermediate  -    0/1       Demo path - A path with one module
 
 $ labctl learn progress
 Course  2/2 modules

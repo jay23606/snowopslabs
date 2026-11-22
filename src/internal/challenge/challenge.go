@@ -10,12 +10,15 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/snowops-oss/snowopslabs/internal/results"
+	"github.com/snowops-oss/snowopslabs/pkg/scenario"
 	"gopkg.in/yaml.v3"
 )
 
@@ -64,14 +67,16 @@ type GCheck struct {
 
 // Challenge is the top-level challenge.yaml schema.
 type Challenge struct {
-	Name        string      `yaml:"name"`
-	DisplayName string      `yaml:"displayName"`
-	Description string      `yaml:"description"`
-	Category    string      `yaml:"category"`
-	ParTime     string      `yaml:"parTime"` // e.g. "10m"
-	Setup       SetupSpec   `yaml:"setup"`
-	Grading     GradingSpec `yaml:"grading"`
-	HintPenalty int         `yaml:"hintPenalty"` // % per hint; default 5
+	Name        string `yaml:"name"`
+	DisplayName string `yaml:"displayName"`
+	Description string `yaml:"description"`
+	Category    string `yaml:"category"`
+	// Meta is the track, level and expected minutes the catalog filters on.
+	scenario.Meta `yaml:",inline"`
+	ParTime       string      `yaml:"parTime"` // e.g. "10m"
+	Setup         SetupSpec   `yaml:"setup"`
+	Grading       GradingSpec `yaml:"grading"`
+	HintPenalty   int         `yaml:"hintPenalty"` // % per hint; default 5
 	// Silent keeps the setup's names from the learner until the run ends:
 	// finding the faults is the exercise.
 	Silent bool `yaml:"silent,omitempty"`
@@ -106,6 +111,7 @@ func (c *Challenge) Validate() []string {
 	if !c.Grading.UseDetectionCheck && len(c.Grading.Checks) == 0 {
 		errs = append(errs, "grading: either useDetectionCheck or checks must be set")
 	}
+	errs = append(errs, c.Meta.Validate()...)
 	if c.ParTime != "" {
 		if _, err := time.ParseDuration(c.ParTime); err != nil {
 			errs = append(errs, "parTime: invalid duration format (use e.g. 10m, 1h)")
@@ -170,6 +176,9 @@ type Engine struct {
 	stateDir     string
 	resultsDir   string // directory for the unified results store
 	now          func() time.Time
+
+	mu         sync.Mutex
+	loadErrors map[string]error // challenge directory name → why it failed to load
 }
 
 // New creates an Engine. resultsDir is the directory holding results.jsonl
@@ -183,7 +192,8 @@ func New(challengeDir, stateDir, resultsDir string) *Engine {
 	}
 }
 
-// Challenges returns all valid challenges.
+// Challenges returns all valid challenges. A challenge that fails to load is
+// left out and reported by LoadErrors.
 func (e *Engine) Challenges() ([]*Challenge, error) {
 	entries, err := os.ReadDir(e.challengeDir)
 	if err != nil {
@@ -193,17 +203,33 @@ func (e *Engine) Challenges() ([]*Challenge, error) {
 		return nil, err
 	}
 	var out []*Challenge
+	failed := make(map[string]error)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		c, err := e.Load(entry.Name())
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // a directory without challenge.yaml is not a challenge
+		}
 		if err != nil {
+			failed[entry.Name()] = err
 			continue
 		}
 		out = append(out, c)
 	}
+	e.mu.Lock()
+	e.loadErrors = failed
+	e.mu.Unlock()
 	return out, nil
+}
+
+// LoadErrors returns the challenges the last Challenges call skipped, keyed
+// by directory name, each with the reason and the fix.
+func (e *Engine) LoadErrors() map[string]error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return maps.Clone(e.loadErrors)
 }
 
 // Load loads and validates a single challenge by name.
@@ -221,6 +247,7 @@ func (e *Engine) Load(name string) (*Challenge, error) {
 		return nil, fmt.Errorf("challenge %s is malformed (run 'labctl validate'): %w", name, err)
 	}
 	c.dir = dir
+	c.ApplyDefaults()
 	if errs := c.Validate(); len(errs) > 0 {
 		return nil, fmt.Errorf("challenge %s is malformed (run 'labctl validate'): %s", name, strings.Join(errs, "; "))
 	}

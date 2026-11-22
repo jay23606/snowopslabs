@@ -8,6 +8,7 @@ check that confirms when you have actually fixed it. The fault contract is
 ```bash
 labctl incident list                          # browse the fault library
 labctl incident list -o json                  # the same as a JSON array, for scripts
+labctl incident list --track kubernetes --level beginner   # only that track and level
 labctl incident info oom-kill                 # details, upstream references, applyable snippets
 labctl incident inject oom-kill               # break the lab on purpose
 labctl incident status                        # run the detection check
@@ -20,9 +21,16 @@ labctl incident resolve oom-kill              # works even if active state was l
 
 `incident list -o json` (`--output json`) prints only a JSON array on stdout:
 each fault as `GET /api/v2/incidents` returns it (`name`, `displayName`,
-`description`, `category`, `severity`, `target`, `prerequisites`,
-`requirements`, `detection` and the rest of `fault.yaml`), plus `active`. A
-silently injected fault is never marked active. Load warnings go to stderr.
+`description`, `category`, `severity`, `track`, `level`, `minutes`, `target`,
+`prerequisites`, `requirements`, `detection` and the rest of `fault.yaml`), plus
+`active`. A silently injected fault is never marked active. Load warnings go to
+stderr.
+
+`--track` and `--level` keep only the faults that match both, in the table and
+in JSON; an unknown value is an error that lists the valid ones.
+`GET /api/v2/incidents` takes `?track=` and `?level=` and filters its `faults`
+list the same way, answering 400 `invalid_request` for an unknown value. The
+values are in [Track, level and minutes](../scenario-schema.md#track-level-and-minutes).
 
 ## Room to inject
 

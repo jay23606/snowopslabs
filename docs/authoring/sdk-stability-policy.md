@@ -35,6 +35,23 @@ Anything under `internal/` is **not** public and may change at any time.
 - Each release publishes a **compatibility matrix** stating which CLI supports
   which content `apiVersion`s (see [RELEASING.md](../../RELEASING.md)).
 
+## Additions within an apiVersion
+
+Optional fields added to `v2` content so far, none of which changes content that
+does not use them:
+
+- `track`, `level` and `minutes` on `scenario.yaml`, `fault.yaml`, `path.yaml`
+  and `challenge.yaml`
+  ([Track, level and minutes](../reference/scenario-schema.md#track-level-and-minutes)).
+  Absent values default to `kubernetes` and `intermediate`. `path.yaml` keeps
+  `estimatedMinutes` as an alias of `minutes`. The JSON schemas list the same
+  values, and the exported `pkg/scenario` package gains `Meta`, `Filter`,
+  `Tracks` and `Levels`. Content that already carried a `track` or `level` key
+  of its own must now use one of the listed values.
+
+New tracks are added to the allowed list in `pkg/scenario/meta.go` and to the
+schemas together, and never removed.
+
 ## How breaking changes happen
 
 Any change to a covered surface requires an **RFC** under

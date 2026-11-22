@@ -11,6 +11,17 @@ export interface AuthStatus {
   role?: AuthRole
 }
 
+// ── Catalog ──────────────────────────────────────────────────────────────────
+
+/** The browsing metadata every scenario, incident, challenge and learning path
+ *  carries (pkg/scenario/meta.go). The server always sends track and level;
+ *  minutes is absent when the item states no time. */
+export interface CatalogMeta {
+  track?: string
+  level?: string
+  minutes?: number
+}
+
 // ── Cluster & Status ─────────────────────────────────────────────────────────
 
 export interface ClusterInfo {
@@ -239,7 +250,7 @@ export interface ScenarioRequirements {
   exclusive?: boolean
 }
 
-export interface Scenario {
+export interface Scenario extends CatalogMeta {
   name: string
   displayName: string
   description: string
@@ -423,7 +434,7 @@ export type NotifyFn = (level: NotifLevel, title: string, detail?: string) => vo
 
 // ── Learn ─────────────────────────────────────────────────────────────────────
 
-export interface LearnPathSummary {
+export interface LearnPathSummary extends CatalogMeta {
   name: string
   displayName: string
   description: string
@@ -469,7 +480,7 @@ export interface LearnProgress {
 
 // ── Challenges ────────────────────────────────────────────────────────────────
 
-export interface ChallengeSummary {
+export interface ChallengeSummary extends CatalogMeta {
   name: string
   displayName: string
   description: string
@@ -532,7 +543,7 @@ export interface ContentSnippet {
 }
 
 /** One fault from the incident catalog (GET /api/v2/incidents → faults[]). */
-export interface Fault {
+export interface Fault extends CatalogMeta {
   name: string
   displayName: string
   description: string

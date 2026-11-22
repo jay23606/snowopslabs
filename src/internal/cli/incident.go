@@ -17,6 +17,7 @@ import (
 
 	"github.com/snowops-oss/snowopslabs/internal/incident"
 	incsvc "github.com/snowops-oss/snowopslabs/internal/service/incident"
+	schema "github.com/snowops-oss/snowopslabs/pkg/scenario"
 	"github.com/spf13/cobra"
 )
 
@@ -41,14 +42,20 @@ it with real tooling, fix it, and let the detection check confirm the fix.
 
 func incidentListCmd() *cobra.Command {
 	var output string
+	var cf catalogFlags
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List available faults",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runIncidentList(cmd.OutOrStdout(), cmd.ErrOrStderr(), output)
+			f, err := cf.filter()
+			if err != nil {
+				return err
+			}
+			return runIncidentList(cmd.OutOrStdout(), cmd.ErrOrStderr(), output, f)
 		},
 	}
 	addOutputFlag(cmd, &output, outputTable, outputJSON)
+	cf.add(cmd)
 	return cmd
 }
 
@@ -61,7 +68,7 @@ type faultListItem struct {
 
 // runIncidentList prints the fault catalog as a table, or with -o json as an
 // array. A silent incident is never marked active, since that would name it.
-func runIncidentList(out, errW io.Writer, output string) error {
+func runIncidentList(out, errW io.Writer, output string, filter schema.Filter) error {
 	if err := checkOutput(output, outputTable, outputJSON); err != nil {
 		return err
 	}
@@ -70,7 +77,8 @@ func runIncidentList(out, errW io.Writer, output string) error {
 			fmt.Fprintf(errW, "Warning: fault %s failed to load: %v\n", key, err)
 		}
 	}()
-	faults := incEng.List()
+	all := incEng.List()
+	faults := schema.Select(all, filter)
 	active, _ := incEng.Active()
 	hidden := active != nil && active.Silent
 	isActive := func(f *incident.Fault) bool { return active != nil && !hidden && active.Fault == f.Name }
@@ -83,19 +91,23 @@ func runIncidentList(out, errW io.Writer, output string) error {
 		return writeJSON(out, items)
 	}
 
-	if len(faults) == 0 {
+	if len(all) == 0 {
 		fmt.Fprintln(out, "No faults found in incidents/.")
 		return nil
 	}
+	if len(faults) == 0 {
+		fmt.Fprintln(out, noMatch("faults", filter))
+		return nil
+	}
 	w := tabwriter.NewWriter(out, 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "NAME\tCATEGORY\tSEVERITY\tTARGET\tSTATUS")
+	fmt.Fprintln(w, "NAME\tTRACK\tLEVEL\tMIN\tCATEGORY\tSEVERITY\tTARGET\tSTATUS")
 	for _, f := range faults {
 		status := ""
 		if isActive(f) {
 			status = "ACTIVE"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s/%s\t%s\n",
-			f.Name, f.Category, f.Severity, f.Target.Namespace, f.Target.Workload, status)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s/%s\t%s\n",
+			f.Name, f.Track, f.Level, minutesCell(f.Minutes), f.Category, f.Severity, f.Target.Namespace, f.Target.Workload, status)
 	}
 	_ = w.Flush()
 	if hidden {
@@ -436,6 +448,7 @@ var incidentInfoCmd = &cobra.Command{
 		fmt.Printf("Name:        %s\n", f.Name)
 		fmt.Printf("Display:     %s\n", f.DisplayName)
 		fmt.Printf("Category:    %s\n", f.Category)
+		printMeta(os.Stdout, f.Meta)
 		fmt.Printf("Severity:    %s\n", f.Severity)
 		// Print the target with templates expanded.
 		rt := incEng.ResolvedTarget(f)

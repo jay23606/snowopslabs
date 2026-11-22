@@ -14,6 +14,7 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/challenge"
 	chalsvc "github.com/snowops-oss/snowopslabs/internal/service/challenge"
 	"github.com/snowops-oss/snowopslabs/pkg/checks"
+	schema "github.com/snowops-oss/snowopslabs/pkg/scenario"
 	"github.com/spf13/cobra"
 )
 
@@ -60,33 +61,46 @@ func challengeGrader() *chalsvc.Grader {
 }
 
 func challengeListCmd() *cobra.Command {
-	return &cobra.Command{
+	var cf catalogFlags
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List available challenges",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			f, err := cf.filter()
+			if err != nil {
+				return err
+			}
 			eng := challengeEngine()
-			cs, err := eng.Challenges()
+			all, err := eng.Challenges()
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			if len(cs) == 0 {
+			warnLoadErrors(cmd.ErrOrStderr(), "challenge", eng.LoadErrors())
+			if len(all) == 0 {
 				fmt.Fprintln(out, "No challenges found.")
 				return nil
 			}
-			fmt.Fprintf(out, "%-35s %-12s %-8s  %s\n", "CHALLENGE", "CATEGORY", "PAR", "DESCRIPTION")
-			fmt.Fprintf(out, "%s\n", strings.Repeat("-", 76))
+			cs := schema.Select(all, f)
+			if len(cs) == 0 {
+				fmt.Fprintln(out, noMatch("challenges", f))
+				return nil
+			}
+			fmt.Fprintf(out, "%-35s %-11s %-13s %-4s %-12s %-8s  %s\n", "CHALLENGE", "TRACK", "LEVEL", "MIN", "CATEGORY", "PAR", "DESCRIPTION")
+			fmt.Fprintf(out, "%s\n", strings.Repeat("-", 100))
 			for _, c := range cs {
 				par := c.ParTime
 				if par == "" {
 					par = "-"
 				}
-				fmt.Fprintf(out, "%-35s %-12s %-8s  %s\n",
-					c.Name, c.Category, par, truncate(c.DisplayName, 50))
+				fmt.Fprintf(out, "%-35s %-11s %-13s %-4s %-12s %-8s  %s\n",
+					c.Name, c.Track, c.Level, minutesCell(c.Minutes), c.Category, par, truncate(c.DisplayName, 50))
 			}
 			return nil
 		},
 	}
+	cf.add(cmd)
+	return cmd
 }
 
 func challengeInfoCmd() *cobra.Command {
@@ -104,6 +118,7 @@ func challengeInfoCmd() *cobra.Command {
 			fmt.Fprintf(out, "Name:        %s\n", c.Name)
 			fmt.Fprintf(out, "Display:     %s\n", c.DisplayName)
 			fmt.Fprintf(out, "Category:    %s\n", c.Category)
+			printMeta(out, c.Meta)
 			fmt.Fprintf(out, "Par time:    %s\n", c.ParTime)
 			fmt.Fprintf(out, "Hint cost:   %d%% per hint\n", hintPenaltyValue(c))
 			fmt.Fprintf(out, "Setup:       %s\n", setupSummary(c))

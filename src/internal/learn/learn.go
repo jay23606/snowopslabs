@@ -9,13 +9,16 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/snowops-oss/snowopslabs/internal/results"
+	"github.com/snowops-oss/snowopslabs/pkg/scenario"
 	"gopkg.in/yaml.v3"
 )
 
@@ -85,10 +88,14 @@ type Module struct {
 
 // Path is the top-level learning path schema.
 type Path struct {
-	Name             string   `yaml:"name"`
-	DisplayName      string   `yaml:"displayName"`
-	Description      string   `yaml:"description"`
-	Tags             []string `yaml:"tags"`
+	Name        string   `yaml:"name"`
+	DisplayName string   `yaml:"displayName"`
+	Description string   `yaml:"description"`
+	Tags        []string `yaml:"tags"`
+	// Meta is the track, level and expected minutes the catalog filters on.
+	scenario.Meta `yaml:",inline"`
+	// EstimatedMinutes is the older name for Minutes. Either may be set, and
+	// Normalize fills the other from it.
 	EstimatedMinutes int      `yaml:"estimatedMinutes"`
 	Modules          []Module `yaml:"modules"`
 	dir              string   // resolved directory on disk
@@ -97,9 +104,28 @@ type Path struct {
 // Dir returns the directory this path was loaded from.
 func (p *Path) Dir() string { return p.dir }
 
+// Normalize applies the track and level defaults and makes minutes and
+// estimatedMinutes agree when only one of them is set.
+func (p *Path) Normalize() {
+	p.ApplyDefaults()
+	switch {
+	case p.Minutes == 0:
+		p.Minutes = p.EstimatedMinutes
+	case p.EstimatedMinutes == 0:
+		p.EstimatedMinutes = p.Minutes
+	}
+}
+
 // Validate checks required fields and returns any validation errors.
 func (p *Path) Validate() []string {
 	var errs []string
+	errs = append(errs, p.Meta.Validate()...)
+	if p.EstimatedMinutes < 0 {
+		errs = append(errs, fmt.Sprintf("estimatedMinutes must be a positive number of minutes, got %d", p.EstimatedMinutes))
+	}
+	if p.Minutes > 0 && p.EstimatedMinutes > 0 && p.Minutes != p.EstimatedMinutes {
+		errs = append(errs, fmt.Sprintf("minutes (%d) and estimatedMinutes (%d) disagree: set one, or make them equal", p.Minutes, p.EstimatedMinutes))
+	}
 	if p.Name == "" {
 		errs = append(errs, "name is required")
 	}
@@ -155,6 +181,9 @@ type Engine struct {
 	stateDir   string
 	resultsDir string // directory for the unified results store (empty = disabled)
 	now        func() string
+
+	mu         sync.Mutex
+	loadErrors map[string]error // path directory name → why it failed to load
 }
 
 // New creates an Engine rooted at learnDir with progress persisted in stateDir.
@@ -168,7 +197,8 @@ func New(learnDir, stateDir, resultsDir string) *Engine {
 	}
 }
 
-// Paths returns all valid learning paths discovered under learnDir.
+// Paths returns all valid learning paths discovered under learnDir. A path
+// that fails to load is left out and reported by LoadErrors.
 func (e *Engine) Paths() ([]*Path, error) {
 	entries, err := os.ReadDir(e.learnDir)
 	if err != nil {
@@ -178,17 +208,33 @@ func (e *Engine) Paths() ([]*Path, error) {
 		return nil, err
 	}
 	var paths []*Path
+	failed := make(map[string]error)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		p, err := e.LoadPath(entry.Name())
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // a directory without path.yaml is not a path
+		}
 		if err != nil {
-			continue // skip malformed paths silently
+			failed[entry.Name()] = err
+			continue
 		}
 		paths = append(paths, p)
 	}
+	e.mu.Lock()
+	e.loadErrors = failed
+	e.mu.Unlock()
 	return paths, nil
+}
+
+// LoadErrors returns the paths the last Paths call skipped, keyed by
+// directory name, each with the reason and the fix.
+func (e *Engine) LoadErrors() map[string]error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return maps.Clone(e.loadErrors)
 }
 
 // LoadPath loads and validates a single path by name.
@@ -206,6 +252,7 @@ func (e *Engine) LoadPath(name string) (*Path, error) {
 		return nil, fmt.Errorf("learning path %s is malformed (run 'labctl validate'): %w", name, err)
 	}
 	p.dir = dir
+	p.Normalize()
 	if errs := p.Validate(); len(errs) > 0 {
 		return nil, fmt.Errorf("learning path %s is malformed (run 'labctl validate'): %s", name, strings.Join(errs, "; "))
 	}

@@ -4,8 +4,11 @@ package schemas
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/snowops-oss/snowopslabs/pkg/scenario"
 )
 
 // TestSchemasAreWellFormed asserts every embedded schema parses as JSON and
@@ -58,6 +61,41 @@ func TestNoCloudRuntimesInSchemas(t *testing.T) {
 		for _, banned := range []string{"\"aks\"", "\"eks\"", "\"gke\""} {
 			if strings.Contains(string(raw), banned) {
 				t.Errorf("schema %q references cut cloud runtime %s (ADR-0001)", kind, banned)
+			}
+		}
+	}
+}
+
+// TestMetaEnumsMatchTheCode keeps the track and level lists in the schemas
+// equal to the ones the loaders validate against, so an editor never offers a
+// value the loader rejects or hides one it accepts.
+func TestMetaEnumsMatchTheCode(t *testing.T) {
+	for _, kind := range []string{"scenario", "incident", "path", "challenge"} {
+		var doc struct {
+			Properties map[string]struct {
+				Enum    []string `json:"enum"`
+				Minimum *int     `json:"minimum"`
+			} `json:"properties"`
+		}
+		if err := json.Unmarshal(ByKind[kind], &doc); err != nil {
+			t.Fatal(err)
+		}
+		for field, want := range map[string][]string{"track": scenario.Tracks, "level": scenario.Levels} {
+			if got := doc.Properties[field].Enum; !slices.Equal(got, want) {
+				t.Errorf("%s schema: %s enum = %v, want %v", kind, field, got, want)
+			}
+		}
+		// Go reads 0 as "not stated", so the schema must accept it.
+		for _, field := range []string{"minutes", "estimatedMinutes"} {
+			p, ok := doc.Properties[field]
+			if !ok {
+				if field == "minutes" {
+					t.Errorf("%s schema has no minutes property", kind)
+				}
+				continue
+			}
+			if p.Minimum == nil || *p.Minimum != 0 {
+				t.Errorf("%s schema: %s minimum = %v, want 0", kind, field, p.Minimum)
 			}
 		}
 	}
