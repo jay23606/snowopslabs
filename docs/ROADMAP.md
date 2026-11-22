@@ -66,7 +66,7 @@ requests `community-request`, and 👍 votes on them show what people want most.
 
 ## Later
 
-- **A CI/CD track.** A Git forge with an Actions runner and a registry in the
+- **[A CI/CD track](https://github.com/snowops-oss/snowopslabs/milestone/6).** A Git forge with an Actions runner and a registry in the
   cluster: build a pipeline from zero, promote a release, secure the pipeline,
   and faults such as a poisoned cache, a mutable tag deploying the wrong
   build, or a runner out of disk. An optional mode runs the same pipeline on

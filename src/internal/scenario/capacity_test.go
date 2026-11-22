@@ -243,3 +243,65 @@ func TestEngine_Down_CallsRelease(t *testing.T) {
 		})
 	}
 }
+
+// Up asks whether every target the scenario requires is ready before it
+// installs anything, and stops with that message when one is not.
+func TestEngine_Up_RequiresTargets(t *testing.T) {
+	const body = `name: gated
+displayName: Gated
+description: x
+category: testing
+%srequirements:
+  memory: 1Gi
+components:
+  - name: step
+    type: script
+    script: step.sh
+`
+	tests := []struct {
+		name        string
+		requires    string
+		readyErr    error
+		wantAsked   []string
+		wantErr     string
+		wantInstall bool
+	}{
+		{name: "default asks for the cluster", wantAsked: []string{"k8s"}, wantInstall: true},
+		{name: "listed targets are all asked", requires: "requires: [k8s, git-forge]\n", wantAsked: []string{"k8s", "git-forge"}, wantInstall: true},
+		{
+			name: "a target that is not ready installs nothing", readyErr: errors.New("target k8s is not ready: no API server\nBring it up with:   labctl init"),
+			wantAsked: []string{"k8s"}, wantErr: "scenario gated cannot start: target k8s is not ready",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeScenario(t, root, "gated", strings.Replace(body, "%s", tt.requires, 1))
+			if err := os.WriteFile(filepath.Join(root, "scenarios", "gated", "step.sh"), []byte("#!/bin/sh\n"), 0o755); err != nil { //nolint:gosec // test script must be executable
+				t.Fatal(err)
+			}
+			eng := NewEngine(root, "k3d.local", "k3d")
+			eng.SetOutput(io.Discard)
+			var asked []string
+			eng.RequireTargets = func(_ context.Context, names []string) error {
+				asked = names
+				return tt.readyErr
+			}
+			rec := &recordingExec{}
+			err := eng.Up("gated", rec, false)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("Up error = %v, want %q", err, tt.wantErr)
+				}
+			} else if err != nil {
+				t.Fatalf("Up: %v", err)
+			}
+			if !slices.Equal(asked, tt.wantAsked) {
+				t.Errorf("asked about %v, want %v", asked, tt.wantAsked)
+			}
+			if got := len(rec.calls) > 0; got != tt.wantInstall {
+				t.Errorf("components installed = %v, want %v", got, tt.wantInstall)
+			}
+		})
+	}
+}

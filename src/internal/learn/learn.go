@@ -35,6 +35,8 @@ type Check struct {
 	Value          string `yaml:"value,omitempty"`
 	Script         string `yaml:"script,omitempty"`
 	TimeoutSeconds int    `yaml:"timeoutSeconds,omitempty"`
+	// Target names the target the check runs against; empty means k8s.
+	Target string `yaml:"target,omitempty"`
 }
 
 // Status returns the expected HTTP status, preferring the canonical

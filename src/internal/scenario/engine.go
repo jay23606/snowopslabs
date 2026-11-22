@@ -26,6 +26,7 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/config"
 	"github.com/snowops-oss/snowopslabs/internal/display"
 	"github.com/snowops-oss/snowopslabs/internal/snippet"
+	"github.com/snowops-oss/snowopslabs/internal/target"
 	"github.com/snowops-oss/snowopslabs/internal/tmpl"
 	"github.com/snowops-oss/snowopslabs/internal/workload"
 	"github.com/snowops-oss/snowopslabs/pkg/checks"
@@ -87,6 +88,9 @@ type Engine struct {
 	// The default hooks do nothing.
 	Hooks extension.Hooks
 
+	// RequireTargets, when set, is asked before a scenario is activated
+	// whether the targets it requires are ready; an error blocks activation.
+	RequireTargets target.RequireFunc
 	// Admit, when set, is asked before a scenario is activated whether the lab
 	// has room for it; an error blocks the activation.
 	Admit AdmitFunc
@@ -389,6 +393,11 @@ func (e *Engine) Up(name string, exec CommandExecutor, force bool) error {
 
 	if err := e.Preflight(s); err != nil {
 		return err
+	}
+	if e.RequireTargets != nil {
+		if err := e.RequireTargets(context.Background(), s.RequiredTargets()); err != nil {
+			return fmt.Errorf("scenario %s cannot start: %w", name, err)
+		}
 	}
 
 	// Validate parameter overrides before installing anything, so a bad value

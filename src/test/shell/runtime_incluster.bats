@@ -12,6 +12,9 @@ setup() {
   stub_setup
   stub_command kubectl helm k3d kind
   ROOT="$(project_root)"
+  # up.sh records its outputs under the lab's state directory.
+  export SNOWOPS_HOME="$STUB_DIR/home"
+  unset LAB_STATE_DIR
 }
 
 teardown() {

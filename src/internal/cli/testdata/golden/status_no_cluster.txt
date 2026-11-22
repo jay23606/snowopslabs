@@ -1,5 +1,6 @@
 $ labctl status
 === Cluster ===
+  Lab:      k3d cluster, kubeconfig <home>/state/clitest/kubeconfig
   Status:   NO CLUSTER (no kubectl context is set)
   Profile:  k3d
 

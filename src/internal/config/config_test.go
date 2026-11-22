@@ -626,7 +626,7 @@ func clearConfigEnv(t *testing.T) {
 	for _, k := range []string{
 		"PROFILE", "CLUSTER_NAME", "DOMAIN_SUFFIX", "HTTP_PORT", "HTTPS_PORT",
 		"INGRESS_CLASS", "STORAGE_CLASS", "REGISTRY_TYPE", "MONITORING_NAMESPACE",
-		"INGRESS_PROVIDER", "METRICS_PROVIDER",
+		"INGRESS_PROVIDER", "METRICS_PROVIDER", "KUBECONFIG_CONTEXT",
 	} {
 		if _, ok := os.LookupEnv(k); ok {
 			t.Setenv(k, "") // record original for restoration

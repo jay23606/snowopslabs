@@ -5,6 +5,7 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,28 +14,39 @@ import (
 
 	"github.com/snowops-oss/snowopslabs/internal/executor"
 	"github.com/snowops-oss/snowopslabs/internal/labtest"
+	"github.com/snowops-oss/snowopslabs/internal/target"
 )
 
-// newTestManager builds a Manager with injected context functions and a temp
-// runtimes dir, bypassing kubectl entirely.
-func newTestManager(t *testing.T, runtimesDir, clusterName, currentCtx string, knownCtxs []string) *Manager {
+// listing is what the injected status and outputs functions answer for one
+// runtime.
+type listing struct {
+	status  target.Status
+	err     error
+	outputs target.Outputs
+	outErr  error
+}
+
+// newTestManager builds a Manager over a temp runtimes dir whose status.sh
+// answers, outputs and user context are injected, so no script runs.
+func newTestManager(t *testing.T, runtimesDir, clusterName, userCtx string, answers map[string]listing) *Manager {
 	t.Helper()
 	m := &Manager{
 		ProjectRoot: filepath.Dir(runtimesDir), // parent of "runtimes"
 		ClusterName: clusterName,
-		getCurrentCtx: func(_ context.Context) (string, error) {
-			return currentCtx, nil
+		status: func(_ context.Context, name string) (target.Status, error) {
+			return answers[name].status, answers[name].err
 		},
-		contextExists: func(_ context.Context, name string) (bool, error) {
-			return slices.Contains(knownCtxs, name), nil
+		outputs: func(name string) (target.Outputs, error) {
+			return answers[name].outputs, answers[name].outErr
 		},
+		userContext: func(_ context.Context) (string, error) { return userCtx, nil },
 	}
 	m.scan()
 	return m
 }
 
 // makeRuntime creates a minimal runtime directory with an up.sh.
-func makeRuntime(t *testing.T, base, name string, envLines []string) {
+func makeRuntime(t *testing.T, base, name string) {
 	t.Helper()
 	dir := filepath.Join(base, name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -44,165 +56,111 @@ func makeRuntime(t *testing.T, base, name string, envLines []string) {
 	if err := os.WriteFile(filepath.Join(dir, "up.sh"), []byte("#!/bin/bash\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if len(envLines) > 0 {
-		content := strings.Join(envLines, "\n") + "\n"
-		if err := os.WriteFile(filepath.Join(dir, "runtime.env"), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
 }
 
-func TestList_K3dCurrentContext(t *testing.T) {
-	root := t.TempDir()
-	rtDir := filepath.Join(root, "runtimes")
-	makeRuntime(t, rtDir, "k3d", nil)
-
-	clusterName := "snowops"
-	expectedCtx := "k3d-" + clusterName
-	m := newTestManager(t, rtDir, clusterName, expectedCtx, []string{expectedCtx})
-
-	list := m.List()
-	if len(list) != 1 {
-		t.Fatalf("expected 1 runtime, got %d", len(list))
+func TestList(t *testing.T) {
+	ready := target.Status{Ready: true}
+	tests := []struct {
+		name        string
+		runtime     string
+		userContext string
+		answer      listing
+		wantActive  bool
+		wantCurrent bool
+	}{
+		{
+			name:        "ready, and its recorded context is the one kubectl has selected",
+			runtime:     "k3d",
+			userContext: "k3d-lab",
+			answer:      listing{status: ready, outputs: target.Outputs{KubeContext: "k3d-lab"}},
+			wantActive:  true,
+			wantCurrent: true,
+		},
+		{
+			name:        "ready, but kubectl has another context selected",
+			runtime:     "k3d",
+			userContext: "colleague-staging",
+			answer:      listing{status: ready, outputs: target.Outputs{KubeContext: "k3d-lab"}},
+			wantActive:  true,
+		},
+		{
+			name:        "ready, and kubectl has no context selected",
+			runtime:     "kind",
+			userContext: "",
+			answer:      listing{status: ready, outputs: target.Outputs{KubeContext: "kind-lab"}},
+			wantActive:  true,
+		},
+		{
+			name:        "a lab from before outputs existed is matched by the context it expects",
+			runtime:     "k3d",
+			userContext: "k3d-lab",
+			answer:      listing{status: ready, outErr: target.ErrNoOutputs},
+			wantActive:  true,
+			wantCurrent: true,
+		},
+		{
+			name:        "the recorded context wins over the expected one",
+			runtime:     "k3d",
+			userContext: "k3d-lab",
+			answer:      listing{status: ready, outputs: target.Outputs{KubeContext: "renamed"}},
+			wantActive:  true,
+		},
+		{
+			name:        "a provider with no context is active and never current",
+			runtime:     "incluster",
+			userContext: "anything",
+			answer:      listing{status: ready, outErr: target.ErrNoOutputs},
+			wantActive:  true,
+		},
+		{
+			name:        "not ready, even though kubectl has its context selected",
+			runtime:     "k3d",
+			userContext: "k3d-lab",
+			answer:      listing{status: target.Status{Reason: "the API server is not answering"}},
+		},
+		{
+			name:        "a status that cannot be read is not active",
+			runtime:     "k3d",
+			userContext: "k3d-lab",
+			answer:      listing{err: errors.New("no status.sh")},
+		},
 	}
-	r := list[0]
-	if r.Name != "k3d" {
-		t.Errorf("name = %q, want k3d", r.Name)
-	}
-	if !r.Active {
-		t.Error("want Active=true when context exists")
-	}
-	if !r.Current {
-		t.Error("want Current=true when context is the current context")
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rtDir := filepath.Join(t.TempDir(), "runtimes")
+			makeRuntime(t, rtDir, tt.runtime)
+			m := newTestManager(t, rtDir, "lab", tt.userContext, map[string]listing{tt.runtime: tt.answer})
 
-func TestList_K3dContextExistsButNotCurrent(t *testing.T) {
-	root := t.TempDir()
-	rtDir := filepath.Join(root, "runtimes")
-	makeRuntime(t, rtDir, "k3d", nil)
-
-	clusterName := "snowops"
-	expectedCtx := "k3d-" + clusterName
-	// current context is something else
-	m := newTestManager(t, rtDir, clusterName, "other-context", []string{expectedCtx})
-
-	list := m.List()
-	r := list[0]
-	if !r.Active {
-		t.Error("want Active=true: context exists in kubeconfig")
-	}
-	if r.Current {
-		t.Error("want Current=false: not the current context")
-	}
-}
-
-func TestList_K3dContextMissing(t *testing.T) {
-	root := t.TempDir()
-	rtDir := filepath.Join(root, "runtimes")
-	makeRuntime(t, rtDir, "k3d", nil)
-
-	m := newTestManager(t, rtDir, "my-cluster", "", []string{})
-
-	list := m.List()
-	r := list[0]
-	if r.Active {
-		t.Error("want Active=false: no matching context in kubeconfig")
-	}
-	if r.Current {
-		t.Error("want Current=false")
-	}
-}
-
-func TestList_CloudRuntimeWithExplicitContext(t *testing.T) {
-	root := t.TempDir()
-	rtDir := filepath.Join(root, "runtimes")
-	makeRuntime(t, rtDir, "kind", []string{
-		"INGRESS_CLASS=nginx",
-		"KUBECONFIG_CONTEXT=my-kind-cluster",
-	})
-
-	m := newTestManager(t, rtDir, "snowops", "my-kind-cluster", []string{"my-kind-cluster"})
-
-	list := m.List()
-	r := list[0]
-	if !r.Active {
-		t.Error("want Active=true: explicit context found in kubeconfig")
-	}
-	if !r.Current {
-		t.Error("want Current=true: is the current context")
-	}
-}
-
-func TestList_CloudRuntimeNoContextConfig(t *testing.T) {
-	root := t.TempDir()
-	rtDir := filepath.Join(root, "runtimes")
-	// kind runtime.env has no KUBECONFIG_CONTEXT
-	makeRuntime(t, rtDir, "kind", []string{
-		"INGRESS_CLASS=nginx",
-		"STORAGE_CLASS=managed-csi",
-	})
-
-	// Even if some context named "kind" happens to be in kubeconfig, it must
-	// NOT be treated as active - we cannot reliably guess the context name.
-	m := newTestManager(t, rtDir, "snowops", "kind", []string{"kind"})
-
-	list := m.List()
-	r := list[0]
-	if r.Active {
-		t.Errorf("want Active=false: no KUBECONFIG_CONTEXT in runtime.env, cannot guess context name")
-	}
-	if r.Current {
-		t.Error("want Current=false")
+			list := m.List()
+			if len(list) != 1 || list[0].Name != tt.runtime {
+				t.Fatalf("List() = %+v, want one entry for %s", list, tt.runtime)
+			}
+			if list[0].Active != tt.wantActive || list[0].Current != tt.wantCurrent {
+				t.Errorf("List() = %+v, want active=%v current=%v", list[0], tt.wantActive, tt.wantCurrent)
+			}
+		})
 	}
 }
 
 func TestList_MultipleRuntimes(t *testing.T) {
-	root := t.TempDir()
-	rtDir := filepath.Join(root, "runtimes")
-	makeRuntime(t, rtDir, "k3d", nil)
-	makeRuntime(t, rtDir, "kind", []string{"INGRESS_CLASS=nginx"}) // no KUBECONFIG_CONTEXT
+	rtDir := filepath.Join(t.TempDir(), "runtimes")
+	makeRuntime(t, rtDir, "k3d")
+	makeRuntime(t, rtDir, "kind")
 
-	m := newTestManager(t, rtDir, "snowops", "k3d-snowops", []string{"k3d-snowops"})
+	m := newTestManager(t, rtDir, "lab", "k3d-lab", map[string]listing{
+		"k3d":  {status: target.Status{Ready: true}, outputs: target.Outputs{KubeContext: "k3d-lab"}},
+		"kind": {status: target.Status{Reason: "kind has no cluster named 'lab'"}},
+	})
 
 	byName := map[string]RuntimeInfo{}
 	for _, r := range m.List() {
 		byName[r.Name] = r
 	}
-
-	k3d, ok := byName["k3d"]
-	if !ok {
-		t.Fatal("k3d not in list")
+	if k3d := byName["k3d"]; !k3d.Active || !k3d.Current {
+		t.Errorf("k3d: want active and current, got %+v", k3d)
 	}
-	if !k3d.Active || !k3d.Current {
-		t.Errorf("k3d: want Active=true Current=true, got Active=%v Current=%v", k3d.Active, k3d.Current)
-	}
-
-	kind, ok := byName["kind"]
-	if !ok {
-		t.Fatal("kind not in list")
-	}
-	if kind.Active || kind.Current {
-		t.Errorf("kind: want Active=false Current=false, got Active=%v Current=%v", kind.Active, kind.Current)
-	}
-}
-
-func TestReadEnvKey(t *testing.T) {
-	f, err := os.CreateTemp(t.TempDir(), "runtime.env")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	f.WriteString("# comment\n")
-	f.WriteString("INGRESS_CLASS=nginx\n")
-	f.WriteString("KUBECONFIG_CONTEXT=my-cluster-ctx\n")
-	f.WriteString("STORAGE_CLASS=managed-csi\n")
-
-	if got := readEnvKey(f.Name(), "KUBECONFIG_CONTEXT"); got != "my-cluster-ctx" {
-		t.Errorf("got %q, want my-cluster-ctx", got)
-	}
-	if got := readEnvKey(f.Name(), "MISSING"); got != "" {
-		t.Errorf("got %q, want empty", got)
+	if kind := byName["kind"]; kind.Active || kind.Current {
+		t.Errorf("kind: want neither active nor current, got %+v", kind)
 	}
 }
 
@@ -233,31 +191,150 @@ func TestNewManager_FindsRuntimesWithAnUpScript(t *testing.T) {
 	}
 }
 
-// The manager asks the real kubectl for the current context and whether the
-// runtime's context exists.
-func TestList_AsksKubectl(t *testing.T) {
+// A runtime is as ready as its own status.sh says, run through the real
+// scripts: the manager reads no kubectl context for it.
+func TestList_RunsEachRuntimesStatusScript(t *testing.T) {
 	tests := []struct {
 		name        string
+		status      string
 		kubectl     string
-		wantCurrent bool
 		wantActive  bool
+		wantCurrent bool
 	}{
-		{"the runtime's context is current", "echo k3d-lab\n", true, true},
-		{"the context exists but another is current",
-			"case \"$*\" in \"config current-context\") echo kind-other ;; \"config get-contexts k3d-lab --no-headers\") echo 'k3d-lab k3d-lab admin' ;; esac\n", false, true},
-		{"the context does not exist",
-			"case \"$*\" in \"config current-context\") echo kind-other ;; *) exit 1 ;; esac\n", false, false},
-		{"kubectl has no context at all", "exit 1\n", false, false},
+		{"status.sh exits 0 and kubectl has the lab's context selected", "exit 0\n", "echo k3d-lab\n", true, true},
+		{"status.sh exits 0 and kubectl has another context selected", "exit 0\n", "echo colleague-staging\n", true, false},
+		{"status.sh exits 0 and kubectl has no context", "exit 0\n", "exit 1\n", true, false},
+		{"status.sh exits non-zero, though kubectl has the lab's context selected", "echo 'not ready' >&2\nexit 1\n", "echo k3d-lab\n", false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m, _, l, _ := fixtureManager(t)
+			l.Write(t, "runtimes/k3d/status.sh", "#!/usr/bin/env bash\n"+tt.status)
 			l.Stub(t, "kubectl", "#!/bin/sh\n"+tt.kubectl)
+			m = NewManager(m.ProjectRoot, "lab")
 			got := m.List()
 			if len(got) != 1 || got[0].Name != "k3d" || got[0].Current != tt.wantCurrent || got[0].Active != tt.wantActive {
 				t.Errorf("List() = %+v, want k3d with current=%v active=%v", got, tt.wantCurrent, tt.wantActive)
 			}
 		})
+	}
+}
+
+// A runtime without a status.sh, such as one a user wrote, is judged by its
+// kubeconfig context as it was before status scripts: KUBECONFIG_CONTEXT in its
+// runtime.env, or the name k3d and kind give.
+func TestList_ARuntimeWithoutStatusScriptIsJudgedByItsContext(t *testing.T) {
+	noScript := listing{err: target.ErrNoStatusScript}
+	tests := []struct {
+		name        string
+		runtime     string
+		runtimeEnv  string
+		exists      map[string]bool
+		userContext string
+		wantActive  bool
+		wantCurrent bool
+	}{
+		{
+			name: "its context exists and is the selected one", runtime: "cloud",
+			runtimeEnv: "# the cluster\nKUBECONFIG_CONTEXT=prod-eu\n", exists: map[string]bool{"prod-eu": true},
+			userContext: "prod-eu", wantActive: true, wantCurrent: true,
+		},
+		{
+			name: "its context exists and another one is selected", runtime: "cloud",
+			runtimeEnv: "KUBECONFIG_CONTEXT=prod-eu\n", exists: map[string]bool{"prod-eu": true},
+			userContext: "colleague-staging", wantActive: true,
+		},
+		{
+			name: "its context is not in the kubeconfig", runtime: "cloud",
+			runtimeEnv: "KUBECONFIG_CONTEXT=prod-eu\n", userContext: "prod-eu",
+		},
+		{
+			name: "no context is named anywhere", runtime: "cloud",
+			runtimeEnv: "REGISTRY_TYPE=none\n", exists: map[string]bool{"": true}, userContext: "anything",
+		},
+		{
+			name: "k3d without a status.sh uses the context named after the cluster", runtime: "k3d",
+			exists: map[string]bool{"k3d-lab": true}, userContext: "k3d-lab", wantActive: true, wantCurrent: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rtDir := filepath.Join(t.TempDir(), "runtimes")
+			makeRuntime(t, rtDir, tt.runtime)
+			if tt.runtimeEnv != "" {
+				if err := os.WriteFile(filepath.Join(rtDir, tt.runtime, "runtime.env"), []byte(tt.runtimeEnv), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			m := newTestManager(t, rtDir, "lab", tt.userContext, map[string]listing{tt.runtime: noScript})
+			m.contextExists = func(_ context.Context, name string) (bool, error) { return tt.exists[name], nil }
+
+			got := m.List()
+			if len(got) != 1 || got[0].Active != tt.wantActive || got[0].Current != tt.wantCurrent {
+				t.Errorf("List() = %+v, want active=%v current=%v", got, tt.wantActive, tt.wantCurrent)
+			}
+		})
+	}
+}
+
+func TestList_AContextThatCannotBeCheckedIsNotActive(t *testing.T) {
+	rtDir := filepath.Join(t.TempDir(), "runtimes")
+	makeRuntime(t, rtDir, "cloud")
+	if err := os.WriteFile(filepath.Join(rtDir, "cloud", "runtime.env"), []byte("KUBECONFIG_CONTEXT=prod-eu\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newTestManager(t, rtDir, "lab", "prod-eu", map[string]listing{"cloud": {err: target.ErrNoStatusScript}})
+	m.contextExists = func(context.Context, string) (bool, error) { return false, errors.New("no kubectl") }
+	if got := m.List(); len(got) != 1 || got[0].Active {
+		t.Errorf("List() = %+v, want it not active", got)
+	}
+}
+
+// The real wiring asks kubectl about the user's own kubeconfig.
+func TestList_ARuntimeWithoutStatusScriptAsksKubectl(t *testing.T) {
+	m, _, l, _ := fixtureManager(t)
+	l.Write(t, "runtimes/cloud/up.sh", "#!/usr/bin/env bash\n")
+	l.Write(t, "runtimes/cloud/runtime.env", "KUBECONFIG_CONTEXT=prod-eu\n")
+	l.Stub(t, "kubectl", `#!/bin/sh
+case "$*" in
+  "config get-contexts prod-eu --no-headers") echo "* prod-eu" ;;
+  "config current-context") echo prod-eu ;;
+  *) exit 1 ;;
+esac
+`)
+	if err := os.Remove(filepath.Join(l.Root, "runtimes", "k3d", "status.sh")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	m = NewManager(m.ProjectRoot, "lab")
+	var cloud RuntimeInfo
+	for _, info := range m.List() {
+		if info.Name == "cloud" {
+			cloud = info
+		}
+	}
+	if !cloud.Active || !cloud.Current {
+		t.Errorf("cloud = %+v, want active and current", cloud)
+	}
+}
+
+// The status script gets the lab's own kubeconfig and state directory, so it
+// answers for this lab whichever context the user has selected.
+func TestList_StatusScriptSeesTheLabsKubeconfig(t *testing.T) {
+	m, _, l, _ := fixtureManager(t)
+	l.Write(t, "runtimes/k3d/status.sh", "#!/usr/bin/env bash\nprintf '%s|%s|%s' \"$1\" \"$KUBECONFIG\" \"$LAB_STATE_DIR\" >\"$LAB_STATE_DIR/seen\"\n")
+	m = NewManager(m.ProjectRoot, "lab")
+	stateDir := filepath.Join(l.Home, "state", "lab")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m.List()
+	seen, err := os.ReadFile(filepath.Join(stateDir, "seen"))
+	if err != nil {
+		t.Fatalf("status.sh did not run: %v", err)
+	}
+	want := "lab|" + filepath.Join(stateDir, "kubeconfig") + "|" + stateDir
+	if string(seen) != want {
+		t.Errorf("status.sh saw %q, want %q", seen, want)
 	}
 }
 

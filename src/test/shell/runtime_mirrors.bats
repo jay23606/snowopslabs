@@ -13,6 +13,12 @@ setup() {
   ROOT="$(project_root)"
   export REACHABLE_WAIT=0
   unset REGISTRY_MIRRORS
+  # up.sh writes the lab's own kubeconfig under the state directory, from
+  # what k3d and kind print.
+  export SNOWOPS_HOME="$STUB_DIR/home"
+  unset LAB_STATE_DIR SNOWOPS_LAB_KUBECONFIG SNOWOPS_USER_KUBECONFIG
+  stub_when k3d "kubeconfig get" 0 "    server: https://0.0.0.0:6443"
+  stub_when kind "get kubeconfig" 0 "    server: https://127.0.0.1:6443"
 }
 
 teardown() {
@@ -71,6 +77,7 @@ k3d_keeps_registry_config() {
   stub_script k3d <<EOF
 case "\$*" in
   *"cluster list"*) exit 1 ;;
+  *"kubeconfig get"*) echo "    server: https://0.0.0.0:6443" ;;
   *"cluster create"*)
     while [ \$# -gt 0 ]; do
       [ "\$1" = --registry-config ] && cp "\$2" "$STUB_DIR/registries.yaml"
@@ -122,6 +129,7 @@ kind_keeps_config() {
   stub_script kind <<EOF
 case "\$*" in
   *"get nodes"*) echo testcluster-control-plane ;;
+  *"get kubeconfig"*) echo "    server: https://127.0.0.1:6443" ;;
   *"create cluster"*)
     while [ \$# -gt 0 ]; do
       [ "\$1" = --config ] && cp "\$2" "$STUB_DIR/kind-config.yaml"

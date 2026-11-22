@@ -22,6 +22,7 @@ var statusCmd = &cobra.Command{
 		ctx := context.Background()
 
 		fmt.Println("=== Cluster ===")
+		printTarget(ctx, cmd.OutOrStdout(), toolchain.NewExec(), cfg)
 		info, err := k8s.GetClusterInfo(ctx)
 		if err != nil || !info.Connected {
 			printUnreachable(cmd.OutOrStdout(), info)

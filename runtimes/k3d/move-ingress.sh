@@ -11,6 +11,10 @@ CLUSTER_NAME="${1:-${CLUSTER_NAME:-snowops}}"
 
 # shellcheck source=../_lib/docker.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/docker.sh"
+# shellcheck source=../_lib/kubeconfig.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/kubeconfig.sh"
+# shellcheck source=../_lib/outputs.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/outputs.sh"
 
 http="$(pick_port 8080 8080)" || exit 1
 https="$(pick_port 8443 8443)" || exit 1
@@ -20,4 +24,5 @@ suffix="$(record_value "$CLUSTER_NAME" DOMAIN_SUFFIX)"
 echo "Adding host ports ${http}/${https} to the load balancer of '$CLUSTER_NAME'..."
 k3d cluster edit "$CLUSTER_NAME" --port-add "${http}:80@loadbalancer" --port-add "${https}:443@loadbalancer"
 write_record "$CLUSTER_NAME" "$http" "$https" "$suffix"
+refresh_outputs "$CLUSTER_NAME"
 echo "The lab's ingress now listens on ${http}/${https}."

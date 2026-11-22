@@ -13,6 +13,10 @@ NEW="$3"
 
 # shellcheck source=docker.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docker.sh"
+# shellcheck source=kubeconfig.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/kubeconfig.sh"
+# shellcheck source=outputs.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/outputs.sh"
 
 # The old suffix as a sed pattern: its dots match only dots.
 old_re="$(printf '%s' "$OLD" | sed 's/\./\\./g')"
@@ -59,4 +63,5 @@ move_kind certificates.cert-manager.io
 http="$(record_value "$CLUSTER_NAME" HTTP_PORT)"
 https="$(record_value "$CLUSTER_NAME" HTTPS_PORT)"
 write_record "$CLUSTER_NAME" "${http:-80}" "${https:-443}" "$NEW"
+refresh_outputs "$CLUSTER_NAME"
 echo "Lab URLs now end in .${NEW}."

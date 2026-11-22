@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -13,6 +14,7 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/challenge"
 	"github.com/snowops-oss/snowopslabs/internal/incident"
 	"github.com/snowops-oss/snowopslabs/internal/learn"
+	"github.com/snowops-oss/snowopslabs/internal/target"
 	"github.com/snowops-oss/snowopslabs/internal/workload"
 	"github.com/snowops-oss/snowopslabs/pkg/scenario"
 )
@@ -106,8 +108,9 @@ func (c *Catalog) loadScenario(dirName, file string, doc *yaml.Node) {
 	s.ApplyDefaults()
 	c.checkName(KindScenario, dirName, s.Name, file, doc)
 	if err := s.Validate(); err != nil {
-		c.problems = append(c.problems, Problem{Kind: KindScenario, Name: nameOr(s.Name, dirName), File: file, Line: metaLine(doc, err.Error()), Message: err.Error()})
+		c.problems = append(c.problems, Problem{Kind: KindScenario, Name: nameOr(s.Name, dirName), File: file, Line: problemLine(doc, err.Error()), Message: err.Error()})
 	}
+	c.checkRequires(KindScenario, nameOr(s.Name, dirName), file, doc, s.Needs)
 	// Reject unknown capabilities now; a misspelt one could never be met.
 	for _, name := range s.Prerequisites.Capabilities {
 		if _, err := workload.ParseCapability(name); err != nil {
@@ -133,8 +136,9 @@ func (c *Catalog) loadIncident(dirName, file string, doc *yaml.Node) {
 	f.ApplyDefaults()
 	c.checkName(KindIncident, dirName, f.Name, file, doc)
 	if err := f.Validate(); err != nil {
-		c.problems = append(c.problems, Problem{Kind: KindIncident, Name: nameOr(f.Name, dirName), File: file, Line: metaLine(doc, err.Error()), Message: err.Error()})
+		c.problems = append(c.problems, Problem{Kind: KindIncident, Name: nameOr(f.Name, dirName), File: file, Line: problemLine(doc, err.Error()), Message: err.Error()})
 	}
+	c.checkRequires(KindIncident, nameOr(f.Name, dirName), file, doc, f.Needs)
 	c.index(KindIncident, dirName, file, doc, func() { c.incidents[dirName] = &f })
 }
 
@@ -147,8 +151,9 @@ func (c *Catalog) loadPath(dirName, file string, doc *yaml.Node) {
 	p.Normalize()
 	c.checkName(KindPath, dirName, p.Name, file, doc)
 	for _, msg := range p.Validate() {
-		c.problems = append(c.problems, Problem{Kind: KindPath, Name: nameOr(p.Name, dirName), File: file, Line: metaLine(doc, msg), Message: msg})
+		c.problems = append(c.problems, Problem{Kind: KindPath, Name: nameOr(p.Name, dirName), File: file, Line: problemLine(doc, msg), Message: msg})
 	}
+	c.checkPathTargets(nameOr(p.Name, dirName), file, doc, &p)
 	c.index(KindPath, dirName, file, doc, func() { c.paths[dirName] = &p })
 }
 
@@ -161,8 +166,9 @@ func (c *Catalog) loadChallenge(dirName, file string, doc *yaml.Node) {
 	ch.ApplyDefaults()
 	c.checkName(KindChallenge, dirName, ch.Name, file, doc)
 	for _, msg := range ch.Validate() {
-		c.problems = append(c.problems, Problem{Kind: KindChallenge, Name: nameOr(ch.Name, dirName), File: file, Line: metaLine(doc, msg), Message: msg})
+		c.problems = append(c.problems, Problem{Kind: KindChallenge, Name: nameOr(ch.Name, dirName), File: file, Line: problemLine(doc, msg), Message: msg})
 	}
+	c.checkRequires(KindChallenge, nameOr(ch.Name, dirName), file, doc, ch.Needs)
 	c.index(KindChallenge, dirName, file, doc, func() { c.challenges[dirName] = &ch })
 }
 
@@ -203,11 +209,55 @@ var metaFields = []struct{ prefix, key string }{
 	{"estimatedMinutes ", "estimatedMinutes"},
 }
 
-// metaLine returns the line of the track, level or minutes key that a
-// validation message is about, or 0 when it is about something else.
-func metaLine(doc *yaml.Node, msg string) int {
+// targetInMessage finds the target name a problem message is about.
+var targetInMessage = regexp.MustCompile(`target "([^"]+)"`)
+
+// checkRequires reports every requires entry that is not a target this lab
+// can supply. The list of known targets is the registry's, so a new target is
+// accepted here once it is registered.
+func (c *Catalog) checkRequires(kind Kind, name, file string, doc *yaml.Node, needs scenario.Needs) {
+	known := target.NewRegistry(nil)
+	for _, t := range needs.Requires {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		if _, err := known.Lookup(t); err != nil {
+			c.problems = append(c.problems, Problem{
+				Kind: kind, Name: name, File: file, Line: lineOfValue(doc, t),
+				Message: fmt.Sprintf("requires: unknown target %q (use %s)", t, strings.Join(known.Names(), ", ")),
+			})
+		}
+	}
+}
+
+// checkPathTargets reports a module check whose target is not a known target,
+// or is not the default one: a path has no requires, so only k8s is available
+// to its checks.
+func (c *Catalog) checkPathTargets(name, file string, doc *yaml.Node, p *learn.Path) {
+	known := target.NewRegistry(nil)
+	for i, m := range p.Modules {
+		t := strings.TrimSpace(m.Check.Target)
+		if t == "" || t == target.DefaultName {
+			continue
+		}
+		msg := fmt.Sprintf("modules[%d]: check target %q is not available: a learning path has no requires and uses %s", i, t, target.DefaultName)
+		if _, err := known.Lookup(t); err != nil {
+			msg = fmt.Sprintf("modules[%d]: check target %q is unknown (use %s)", i, t, strings.Join(known.Names(), ", "))
+		}
+		c.problems = append(c.problems, Problem{Kind: KindPath, Name: name, File: file, Line: lineOfValue(doc, t), Message: msg})
+	}
+}
+
+// problemLine returns the line of the key or value a validation message is
+// about: the track, level or minutes key, or a target name. It is 0 when the
+// message is about something else.
+func problemLine(doc *yaml.Node, msg string) int {
 	if doc == nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
 		return 0
+	}
+	if m := targetInMessage.FindStringSubmatch(msg); m != nil {
+		return lineOfValue(doc, m[1])
 	}
 	for _, f := range metaFields {
 		if !strings.Contains(msg, f.prefix) {

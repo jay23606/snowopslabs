@@ -35,6 +35,10 @@ NODE_CHECK_INTERVAL="${NODE_CHECK_INTERVAL:-10}"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/mirrors.sh"
 # shellcheck source=../_lib/k3d-serverlb.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/k3d-serverlb.sh"
+# shellcheck source=../_lib/kubeconfig.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/kubeconfig.sh"
+# shellcheck source=../_lib/outputs.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/outputs.sh"
 
 ensure_docker_running || exit 1
 
@@ -57,6 +61,16 @@ normalize_apiserver_host() {
     echo "Pointing kubectl at ${fixed} (k3d wrote ${server})."
     kubectl config set-cluster "$ctx" --server="$fixed" >/dev/null
   fi
+}
+
+# refresh_kubeconfigs rewrites the lab's own kubeconfig from k3d and points
+# every later kubectl call in this script at it. The context is also merged into
+# the user's kubeconfig, so plain kubectl keeps working.
+refresh_kubeconfigs() {
+  use_lab_kubeconfig "$CLUSTER_NAME"
+  with_user_kubeconfig k3d kubeconfig merge "$CLUSTER_NAME" --kubeconfig-merge-default &>/dev/null || true
+  with_user_kubeconfig normalize_apiserver_host || true
+  write_lab_kubeconfig "$CLUSTER_NAME" k3d kubeconfig get "$CLUSTER_NAME"
 }
 
 # Return 0 only if the cluster's API server actually answers. This is what tells
@@ -318,17 +332,19 @@ create_cluster() {
 
   # --timeout rolls back a creation that never finishes; one retry covers a
   # transient failure without leaving a half-built cluster behind.
-  if ! k3d cluster create "${create_args[@]}" --timeout 300s; then
+  # k3d adds the context to the user's kubeconfig and switches to it, so the
+  # create runs against that file; the lab's own kubeconfig is written after.
+  if ! with_user_kubeconfig k3d cluster create "${create_args[@]}" --timeout 300s; then
     echo "Cluster creation failed - cleaning up and retrying once..." >&2
-    k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
-    k3d cluster create "${create_args[@]}" --timeout 300s || {
+    with_user_kubeconfig k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
+    with_user_kubeconfig k3d cluster create "${create_args[@]}" --timeout 300s || {
       echo "ERROR: k3d could not create the cluster. 'labctl doctor' checks Docker's resources." >&2
       exit 1
     }
   fi
 
-  kubectl config use-context "k3d-$CLUSTER_NAME"
-  normalize_apiserver_host
+  with_user_kubeconfig kubectl config use-context "k3d-$CLUSTER_NAME" || true
+  refresh_kubeconfigs || exit 1
 }
 
 # An existing cluster is brought back rather than replaced: its kubeconfig
@@ -361,15 +377,13 @@ restart_in_order() {
     kill "$start_pid" 2>/dev/null || true
   fi
   wait "$start_pid" 2>/dev/null || true
-  k3d kubeconfig merge "$CLUSTER_NAME" --kubeconfig-merge-default &>/dev/null || true
-  normalize_apiserver_host
+  refresh_kubeconfigs || true
 }
 
 if k3d cluster list "$CLUSTER_NAME" &>/dev/null; then
   echo "Cluster '$CLUSTER_NAME' already exists - checking it is healthy."
-  # Rebuild the kubeconfig entry in case it was removed or points at a stale port.
-  k3d kubeconfig merge "$CLUSTER_NAME" --kubeconfig-merge-default &>/dev/null || true
-  normalize_apiserver_host
+  # Rebuild the kubeconfigs in case they were removed or point at a stale port.
+  refresh_kubeconfigs || true
   # A node removed since the last start can leave the load balancer naming a
   # container that is gone. After a Docker restart that keeps it restart-looping
   # and the API unreachable, and restarting the cluster does not help.
@@ -394,13 +408,20 @@ if k3d cluster list "$CLUSTER_NAME" &>/dev/null; then
     echo "  Check Docker's memory with 'labctl doctor'. To rebuild the lab from scratch (loses its state): labctl reset" >&2
     exit 1
   fi
+  if [ ! -s "$(lab_kubeconfig_file "$CLUSTER_NAME")" ]; then
+    echo "ERROR: cluster '$CLUSTER_NAME' is healthy but the lab has no kubeconfig for it." >&2
+    echo "  'k3d kubeconfig get $CLUSTER_NAME' shows why k3d could not print one." >&2
+    exit 1
+  fi
   mark_corrected
   echo "Cluster '$CLUSTER_NAME' is healthy; skipping creation."
   raise_inotify_limits
   record_ingress_ports "$CLUSTER_NAME" "k3d-${CLUSTER_NAME}-serverlb"
+  write_outputs "$CLUSTER_NAME" k3d "$(lab_kubeconfig_file "$CLUSTER_NAME")" "k3d-$CLUSTER_NAME"
   exit 0
 fi
 
 create_cluster
 raise_inotify_limits
 record_ingress_ports "$CLUSTER_NAME" "k3d-${CLUSTER_NAME}-serverlb"
+write_outputs "$CLUSTER_NAME" k3d "$(lab_kubeconfig_file "$CLUSTER_NAME")" "k3d-$CLUSTER_NAME"

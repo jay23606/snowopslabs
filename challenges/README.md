@@ -26,6 +26,7 @@ category: workload                 # workload | network | resources | config
 track: kubernetes                  # kubernetes | cicd | iac; default kubernetes
 level: beginner                    # beginner | intermediate | advanced; default intermediate
 minutes: 10                        # expected time, setup to submit; optional
+requires: [k8s]                    # targets it needs; default [k8s]
 parTime: "10m"                     # Go duration string; omit for unscored time
 setup:
   type: incident                   # incident | scenario
@@ -43,6 +44,12 @@ grading:
   #     expectStatus: 200
 hintPenalty: 5                     # % score deducted per hint (default 5)
 ```
+
+`requires` lists the targets the challenge needs, and `challenge start` checks
+that each is ready before it sets anything up. An inline check in `grading`
+takes an optional `target:` that must be listed in `requires`. Both default to
+`k8s`; see
+[Targets](../docs/reference/scenario-schema.md#targets-requires-and-target).
 
 ## Current challenges
 

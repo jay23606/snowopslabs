@@ -14,6 +14,7 @@
     "track": { "type": "string", "enum": ["kubernetes", "cicd", "iac"], "description": "Area of platform work. Absent means kubernetes." },
     "level": { "type": "string", "enum": ["beginner", "intermediate", "advanced"], "description": "Difficulty. Absent means intermediate." },
     "minutes": { "type": "integer", "minimum": 0, "description": "Expected time in minutes. 0 means not stated." },
+    "requires": { "type": "array", "uniqueItems": true, "items": { "type": "string", "enum": ["k8s"] }, "description": "Targets this needs. Absent means [k8s]. List k8s as well as any other target when the cluster is used too." },
     "parTime": { "type": "string", "description": "Target time, e.g. \"12m\" (Go duration)." },
     "hintPenalty": { "type": "integer", "minimum": 0, "maximum": 100, "description": "Percent score deducted per revealed hint (default 5)." },
     "setup": {

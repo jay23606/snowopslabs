@@ -49,8 +49,18 @@ does not use them:
   `Tracks` and `Levels`. Content that already carried a `track` or `level` key
   of its own must now use one of the listed values.
 
+- `requires` on `scenario.yaml`, `fault.yaml` and `challenge.yaml`, `target` on
+  components and checks, and `inject:` and `resolve:` with a `target` on
+  `fault.yaml`
+  ([Targets](../reference/scenario-schema.md#targets-requires-and-target)).
+  Absent values mean the `k8s` target, so existing content is unchanged. The
+  JSON schemas list the same target names, and the exported packages gain
+  `scenario.Needs`, `scenario.TargetUse`, `scenario.DefaultTarget` and a
+  `Target` field on `scenario.Component` and `checks.Check`.
+
 New tracks are added to the allowed list in `pkg/scenario/meta.go` and to the
-schemas together, and never removed.
+schemas together, and never removed. New targets are added to the registry in
+`internal/target` and to the schemas together.
 
 ## How breaking changes happen
 

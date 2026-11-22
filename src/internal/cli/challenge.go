@@ -146,6 +146,9 @@ func challengeStartCmd() *cobra.Command {
 			if err := requireCluster(cmd.Context()); err != nil {
 				return err
 			}
+			if err := preflightTargets(cmd.Context(), c.RequiredTargets()); err != nil {
+				return fmt.Errorf("challenge %s cannot start: %w", name, err)
+			}
 			// The setup breaks a running app, so check it and the platform it
 			// needs are there first (or install them with --deploy-prereqs).
 			if err := ensurePlatformPrereqs(cmd.Context(), cmd.OutOrStdout(), challengePlatformPrereqs(c), deployPrereqs); err != nil {

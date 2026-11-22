@@ -13,6 +13,12 @@ setup() {
   ROOT="$(project_root)"
   # The stubs answer at once, so nothing needs up.sh's real-world waits.
   export REACHABLE_WAIT=0
+  # The lab's own kubeconfig is written under the lab's state directory; k3d
+  # and kind print the kubeconfig that goes in it.
+  export SNOWOPS_HOME="$STUB_DIR/home"
+  unset LAB_STATE_DIR SNOWOPS_LAB_KUBECONFIG SNOWOPS_USER_KUBECONFIG
+  stub_when k3d "kubeconfig get" 0 "    server: https://0.0.0.0:6443"
+  stub_when kind "get kubeconfig" 0 "    server: https://127.0.0.1:6443"
 }
 
 teardown() {

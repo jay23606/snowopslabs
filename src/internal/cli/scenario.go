@@ -143,6 +143,9 @@ var scenarioUpCmd = &cobra.Command{
 		if err := requireCluster(cmd.Context()); err != nil {
 			return err
 		}
+		if err := preflightTargets(cmd.Context(), s.RequiredTargets()); err != nil {
+			return fmt.Errorf("scenario %s cannot start: %w", name, err)
+		}
 		// Check the lab has room before installing any prerequisite for it.
 		// Warnings are left to the activation itself, which checks again.
 		if scenes.Admit != nil && !s.Active {

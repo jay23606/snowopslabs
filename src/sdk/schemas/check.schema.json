@@ -26,7 +26,8 @@
     "operator": { "type": "string", "enum": ["==", "!=", "<", "<=", ">", ">=", "contains"] },
     "value": { "type": "string" },
     "script": { "type": "string" },
-    "timeoutSeconds": { "type": "integer", "minimum": 0 }
+    "timeoutSeconds": { "type": "integer", "minimum": 0 },
+    "target": { "type": "string", "enum": ["k8s"], "description": "Target it runs against. Absent means k8s. Must be listed in requires." }
   },
   "allOf": [
     { "if": { "properties": { "type": { "const": "http" } } }, "then": { "required": ["url"] } },

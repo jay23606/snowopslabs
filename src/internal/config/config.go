@@ -9,10 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/snowops-oss/snowopslabs/internal/target"
 	"github.com/snowops-oss/snowopslabs/internal/workload"
 )
 
@@ -23,6 +25,13 @@ type Config struct {
 
 	// StateDir holds the lab state of this cluster; see StateDir.
 	StateDir string
+	// Kubeconfig is the lab's own kubeconfig in StateDir, which every run
+	// uses instead of the user's current kubectl context. Empty for the
+	// incluster profile, which uses the pod's ServiceAccount.
+	Kubeconfig string
+	// KubeContext is the context in the user's kubeconfig the lab's cluster
+	// was created under; the lab's own kubeconfig is cut from it when missing.
+	KubeContext string
 
 	// Cluster/Runtime
 	Profile     string
@@ -138,6 +147,10 @@ func Load(projectRoot string) (*Config, error) {
 		return nil, fmt.Errorf("locating the lab state directory: %w", err)
 	}
 	cfg.StateDir = stateDir
+	if profile != target.ProviderIncluster {
+		cfg.Kubeconfig = filepath.Join(stateDir, target.KubeconfigFile)
+	}
+	cfg.KubeContext = target.ExpectedContext(profile, cfg.ClusterName, resolveEnv(fileVals, "KUBECONFIG_CONTEXT", ""))
 
 	// The runtime records how this machine reaches the cluster's ingress: the
 	// ports it bound, which differ from the configured ones when those are
@@ -195,8 +208,55 @@ func Load(projectRoot string) (*Config, error) {
 	for k := range fileVals {
 		cfg.ScriptEnv[k] = resolveEnv(fileVals, k, fileVals[k])
 	}
+	// Every child process reaches the lab's cluster through its own kubeconfig,
+	// the one its provider recorded when it has recorded one.
+	out := cfg.K8sOutputs()
+	cfg.Kubeconfig, cfg.KubeContext = out.Kubeconfig, out.KubeContext
+	maps.Copy(cfg.ScriptEnv, out.KubeEnv())
 
 	return cfg, nil
+}
+
+// K8sOutputs is what the lab's Kubernetes target provides to a run. Every run
+// that uses the default target gets its environment from here. The outputs.env
+// its provider wrote are the source; a lab without a valid file yet, or whose
+// file came from another runtime profile, gets the values computed from the
+// configuration.
+func (c *Config) K8sOutputs() target.Outputs {
+	out := target.Outputs{
+		Profile:      c.Profile,
+		Kubeconfig:   c.Kubeconfig,
+		KubeContext:  c.KubeContext,
+		HTTPPort:     c.HTTPPort,
+		HTTPSPort:    c.HTTPSPort,
+		DomainSuffix: c.DomainSuffix,
+	}
+	if c.StateDir == "" {
+		return out
+	}
+	rec, err := target.LoadOutputs(filepath.Join(c.StateDir, target.OutputsFile), c.Profile)
+	if err != nil || (rec.Profile != "" && rec.Profile != c.Profile) {
+		return out
+	}
+	for dst, v := range map[*string]string{
+		&out.Kubeconfig: rec.Kubeconfig, &out.KubeContext: rec.KubeContext,
+		&out.HTTPPort: rec.HTTPPort, &out.HTTPSPort: rec.HTTPSPort, &out.DomainSuffix: rec.DomainSuffix,
+	} {
+		if v != "" {
+			*dst = v
+		}
+	}
+	return out
+}
+
+// TargetOutputs returns the outputs of the named target, k8s when name is
+// empty. A target the lab cannot supply is an error.
+func (c *Config) TargetOutputs(name string) (target.Outputs, error) {
+	switch name {
+	case "", target.DefaultName:
+		return c.K8sOutputs(), nil
+	}
+	return target.Outputs{}, fmt.Errorf("no outputs for target %q: only %s is supplied today", name, target.DefaultName)
 }
 
 // LoadAppConfig reads app-specific config from apps/<name>/app.env.

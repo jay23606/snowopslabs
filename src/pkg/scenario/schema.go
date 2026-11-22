@@ -56,6 +56,8 @@ type Scenario struct {
 	Category    string `yaml:"category" json:"category"`
 	// Meta is the track, level and expected minutes the catalog filters on.
 	Meta `yaml:",inline"`
+	// Needs lists the targets the scenario requires; see Needs.
+	Needs `yaml:",inline"`
 	// Verified marks a scenario tested end to end on a fresh cluster. The UI
 	// and CLI flag scenarios without it.
 	Verified      bool          `yaml:"verified,omitempty" json:"verified"`
@@ -132,6 +134,10 @@ type Component struct {
 	// Adopt uses an already-installed Helm release as it is instead of
 	// upgrading it, and teardown leaves it in place.
 	Adopt bool `yaml:"adopt,omitempty" json:"adopt,omitempty"`
+
+	// Target is the target the component is installed on. Empty means k8s.
+	// It must be listed in the scenario's requires.
+	Target string `yaml:"target,omitempty" json:"target,omitempty"`
 }
 
 // Explore contains hints for the user on how to explore the scenario.
@@ -356,6 +362,18 @@ func unsafePath(p string) bool {
 	return false
 }
 
+// targetUses lists every component and check that names a target.
+func (s *Scenario) targetUses() []TargetUse {
+	var uses []TargetUse
+	for _, c := range s.AllComponents() {
+		uses = append(uses, TargetUse{Where: fmt.Sprintf("component %q", c.Name), Target: c.Target})
+	}
+	for _, c := range s.Checks {
+		uses = append(uses, TargetUse{Where: fmt.Sprintf("check %q", c.Name), Target: c.Target})
+	}
+	return uses
+}
+
 // Validate reports every schema problem in the scenario at once, naming the
 // offending fields. It accepts all valid v1 scenarios unchanged.
 func (s *Scenario) Validate() error {
@@ -442,6 +460,7 @@ func (s *Scenario) Validate() error {
 		}
 	}
 
+	errs = append(errs, s.ValidateTargets(s.targetUses())...)
 	errs = append(errs, ValidateReferences(s.References)...)
 	errs = append(errs, ValidateSnippets(s.Snippets)...)
 	errs = append(errs, ValidateParameters(s.Parameters)...)

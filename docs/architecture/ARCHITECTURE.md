@@ -288,6 +288,36 @@ All external binaries go through `internal/toolchain`. Each adapter:
 
 `labctl doctor` runs every preflight at once and prints a fix for each failure.
 
+### 5.1 Which cluster a run targets
+
+A run never uses the user's current kubectl context. The runtime writes a
+kubeconfig for the lab to `<state dir>/kubeconfig`, and `internal/cli` points the
+process's `KUBECONFIG` at it before any command runs. Every child process
+inherits it: the run engine, the web UI's executor, check scripts, and the
+kubectl calls in `internal/k8s`. `internal/config` carries the same path in
+`Config.Kubeconfig` and `ScriptEnv`, and the run engine's script environment and
+the check environment (`internal/labcheck`) name it explicitly. A lab that
+predates the file gets it on first use, cut from the context labctl expects
+(`internal/target`). The `incluster` profile has no file and keeps its
+ServiceAccount. See [runtime profiles](../runtime-profiles.md#the-labs-own-kubeconfig).
+
+### 5.2 Targets and providers
+
+A lab is a set of named **targets**, and the Kubernetes cluster is the default
+one, `k8s` ([ADR-0017](../adr/0017-tracks-and-targets.md)). `internal/target`
+holds the registry of targets, the outputs loader and the provider status
+check. The runtime profiles under `runtimes/` (k3d, kind, incluster) are the
+providers of `k8s`. A provider has `up.sh`, `down.sh` and `status.sh`, and its
+`up.sh` records what it produced (kubeconfig, context, ingress ports, domain
+suffix) in `outputs.env` in the lab's state directory
+([contract](../../runtimes/README.md)). Up and down run through the run engine
+under the `lab` lock key. `status.sh` is polled, so `internal/target` runs it
+through the toolchain runner with a 20 second timeout (a check that outlives it
+is reported as not ready, not as an error) and no run record.
+A command that checks its targets before starting content does so once.
+`runtime.Manager` reports a runtime as active from its answer. An unknown
+target name is refused with the names the lab has.
+
 ## 6. Content model
 
 All content is YAML, loaded and validated by `internal/catalog` at startup:

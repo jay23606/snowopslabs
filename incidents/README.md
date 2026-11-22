@@ -37,6 +37,7 @@ severity: high                    # low | medium | high
 track: kubernetes                 # kubernetes | cicd | iac; default kubernetes
 level: beginner                   # beginner | intermediate | advanced; default intermediate
 minutes: 15                       # expected time from inject to resolved; optional
+requires: [k8s]                   # targets it needs; default [k8s]
 target:                           # templatable - see "Targeting a workload"
   namespace: "{{.WorkloadNamespace}}"
   workload: "{{.WorkloadName}}"
@@ -66,6 +67,17 @@ snippets:                         # optional: applyable diagnose/remediate manif
                   - name: PORT
                     value: "8080"
 ```
+
+### Requiring targets
+
+`requires` lists the targets the fault needs, and defaults to `[k8s]`.
+`labctl incident inject` checks that each one is ready first and stops with
+what to run when one is not. The `detection` check takes an optional `target:`
+like any check. To run `inject.sh` or `resolve.sh` against another target, set
+`inject: {target: <name>}` or `resolve: {target: <name>}`; the top-level
+`target:` below always names the broken workload. A `target:` that is not in
+`requires` fails `labctl validate`. See
+[Targets](../docs/reference/scenario-schema.md#targets-requires-and-target).
 
 ### Targeting a workload
 

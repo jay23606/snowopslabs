@@ -18,6 +18,7 @@ category: observability               # grouping label
 track: kubernetes                     # kubernetes | cicd | iac; default kubernetes
 level: intermediate                   # beginner | intermediate | advanced; default intermediate
 minutes: 30                           # expected time to finish; optional
+requires: [k8s]                       # targets it needs; default [k8s]
 
 prerequisites:
   platform: [ingress, monitoring/metrics]
@@ -86,6 +87,49 @@ They install in the order listed. `monitoring/metrics` comes before any
 component whose values turn on a `serviceMonitor`: the chart creates it only
 when the Prometheus CRDs already exist
 (`TestRepoScenarios_MetricsBeforeWhatTheyScrape`).
+
+## Targets: `requires` and `target`
+
+A lab is a set of named targets, and the Kubernetes cluster, `k8s`, is the
+default one ([ADR-0017](../adr/0017-tracks-and-targets.md#targets-are-an-engine-word-not-a-learner-word)).
+A scenario says which targets it needs with `requires`, and a component or
+check says which one it runs against with `target`.
+
+```yaml
+requires: [k8s]            # optional; absent means [k8s]
+components:
+  - name: web
+    type: manifest
+    path: web.yaml
+    target: k8s            # optional; absent means k8s
+checks:
+  - name: web-ready
+    type: kubectl
+    target: k8s            # optional; absent means k8s
+    # ...
+```
+
+| Field | Where | Values | When absent |
+|---|---|---|---|
+| `requires` | scenario, incident and challenge | a list of target names | `[k8s]` |
+| `target` | component, check, incident `inject:` and `resolve:` | one name from `requires` | `k8s` |
+
+Only `k8s` exists today, so every scenario can leave both fields out and the
+shipped ones do. A scenario that lists only another target does not need the
+cluster; list `k8s` as well when it uses both.
+
+`labctl validate` rejects a name in `requires` that the lab has no target for,
+and a `target:` that the item does not list in `requires`, with the file and
+line of the name. `scenario up`, `incident inject` and `challenge start` check
+that each required target is ready before they change anything. When one is
+not, they stop and say which, why, and what to run: for `k8s` that is
+`labctl init`. A run that uses a target receives that target's outputs in its
+environment; for `k8s` that is `KUBECONFIG` (the lab's own) and the ingress
+ports and domain, as in
+[the runtime contract](../../runtimes/README.md#the-outputs-file).
+
+A learning path has no `requires`, so a module check may name no target but
+`k8s`; `labctl validate` reports any other name at its line.
 
 ## Components
 
@@ -519,6 +563,11 @@ script, check script and fault script run by the engine is given:
 | `WORKLOAD_METRIC` | `http_server_request_duration_seconds` |
 | `PROJECT_ROOT` | `/home/me/snowopslabs` (the clone) |
 | `LAB_STATE_DIR` | `/home/me/.snowops/state/snowops` |
+| `KUBECONFIG` | `/home/me/.snowops/state/snowops/kubeconfig` (the lab's own, one context) |
+
+`KUBECONFIG` is the lab's kubeconfig, so `kubectl` and `helm` in a script reach
+the lab whichever context the user has selected, and a script never passes
+`--context`. It is not set on the `incluster` profile.
 
 Check scripts also get the lab's ingress: `DOMAIN_SUFFIX`, `INGRESS_URL_SUFFIX`,
 `HTTP_PORT`, `HTTPS_PORT`, and `PROMETHEUS_URL`, `GRAFANA_URL` and
@@ -713,6 +762,8 @@ Enforced at load time - an invalid scenario refuses to load, and CI fails on it.
 - Stage, component and check names are unique and non-empty.
 - Every `helm` component has a pinned `version`.
 - Each check type accepts only its own fields.
+- Every name in `requires` is a target the lab has, and appears once.
+- A `target:` on a component or check is listed in `requires`.
 - Asset paths stay inside the scenario directory; absolute paths and `..`
   traversal are rejected.
 - Template variables must be known.

@@ -68,6 +68,23 @@ func TestPrometheusAndAlertmanagerURL(t *testing.T) {
 	}
 }
 
+// Check scripts and kubectl checks reach the lab's own cluster, whatever
+// context the user has selected; the incluster profile has no such file.
+func TestScriptEnv_LabKubeconfig(t *testing.T) {
+	t.Setenv("PROMETHEUS_URL", "")
+	t.Setenv("ALERTMANAGER_URL", "")
+	with := strings.Join(ScriptEnv(&config.Config{Profile: "k3d", Kubeconfig: "/state/lab/kubeconfig"}, workload.Workload{}), "\n")
+	for _, want := range []string{"KUBECONFIG=/state/lab/kubeconfig", "SNOWOPS_LAB_KUBECONFIG=/state/lab/kubeconfig"} {
+		if !strings.Contains(with, want) {
+			t.Errorf("env does not carry %q:\n%s", want, with)
+		}
+	}
+	without := strings.Join(ScriptEnv(&config.Config{Profile: "incluster"}, workload.Workload{}), "\n")
+	if strings.Contains(without, "KUBECONFIG") {
+		t.Errorf("incluster env carries a KUBECONFIG:\n%s", without)
+	}
+}
+
 func TestScriptEnv(t *testing.T) {
 	t.Setenv("PROMETHEUS_URL", "")
 	t.Setenv("ALERTMANAGER_URL", "")
