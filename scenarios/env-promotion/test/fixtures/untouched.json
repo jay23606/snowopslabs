@@ -18,13 +18,13 @@
       "out": "v1.0.0"
     },
     "get deployment/go-api --namespace env-dev -o jsonpath={.status.readyReplicas}": {
-      "out": ""
+      "out": "1"
     },
     "get deployment/go-api --namespace env-prod -o jsonpath={.status.readyReplicas}": {
       "out": ""
     },
     "get deployment/go-api --namespace env-staging -o jsonpath={.status.readyReplicas}": {
-      "out": ""
+      "out": "1"
     },
     "get namespace/env-dev -o name": {
       "out": "namespace/env-dev\n"
@@ -42,8 +42,8 @@
     "env-prod-namespace-exists": true,
     "env-staging-namespace-exists": true,
     "newer-release-reached-prod": false,
-    "workload-running-in-dev": false,
+    "workload-running-in-dev": true,
     "workload-running-in-prod": false,
-    "workload-running-in-staging": false
+    "workload-running-in-staging": true
   }
 }
