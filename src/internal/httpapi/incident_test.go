@@ -16,6 +16,7 @@ import (
 	"github.com/snowops-oss/snowopslabs/internal/config"
 	"github.com/snowops-oss/snowopslabs/internal/executor"
 	"github.com/snowops-oss/snowopslabs/internal/incident"
+	"github.com/snowops-oss/snowopslabs/internal/labtest"
 	"github.com/snowops-oss/snowopslabs/internal/store"
 )
 
@@ -407,4 +408,54 @@ func TestRuns_HiddenRunWithholdsItsOutput(t *testing.T) {
 		t.Errorf("the hidden run's steps were sent: %s", detail.Body)
 	}
 	assertProblem(t, do(s, http.MethodGet, "/runs/run-9/logs", "", nil), http.StatusForbidden, "hidden_run", apiPrefix+"/runs/run-9/logs")
+}
+
+// not-since and exclude answer bad input with 400 before anything is picked;
+// valid filters change the pick, and filters that leave nothing answer 409.
+func TestHandleIncidentInjectRandom_Filters(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		status  int
+		problem string // the problem slug, for an error
+		want    string // in the body
+	}{
+		// Seed 3 picks demo-fault from the whole pool.
+		{"exclude changes the pick", "&seed=3&exclude=" + labFault, http.StatusOK, "", `"name":"other-fault"`},
+		{"a not-since that does not parse", "&not-since=soon", http.StatusBadRequest, "invalid_input", "invalid not-since duration"},
+		{"a negative not-since", "&not-since=-1h", http.StatusBadRequest, "invalid_input", "not-since duration must be non-negative"},
+		{"an unknown fault in exclude", "&exclude=other-fault,%20ghost", http.StatusBadRequest, "invalid_input", `excluded fault \"ghost\" does not exist`},
+		{"every exclude value is split and trimmed", "&exclude=other-fault,%20" + labFault + "&exclude=" + labFault, http.StatusConflict, "no_eligible_fault", "after applying filters"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lab := labtest.New(t)
+			lab.Write(t, "incidents/other-fault/fault.yaml", strings.ReplaceAll(readLabFile(t, lab, "incidents/"+labFault+"/fault.yaml"), labFault, "other-fault"))
+			for _, f := range []string{"inject.sh", "resolve.sh", "checks/resolved.sh", "hints.md", "solution.md"} {
+				lab.Write(t, "incidents/other-fault/"+f, readLabFile(t, lab, "incidents/"+labFault+"/"+f))
+			}
+			s := contractServer(t, lab)
+
+			path := "/incidents/inject-random?app=" + labApp + tt.query
+			w := do(s, http.MethodPost, path, "", nil)
+			waitForJobs(t, s)
+			if tt.problem != "" {
+				assertProblem(t, w, tt.status, tt.problem, instanceOf(t, path))
+			} else if w.Code != tt.status {
+				t.Fatalf("status = %d, want %d\nbody: %s", w.Code, tt.status, w.Body)
+			}
+			if !strings.Contains(w.Body.String(), tt.want) {
+				t.Errorf("body = %s, want it to contain %s", w.Body, tt.want)
+			}
+		})
+	}
+}
+
+func readLabFile(t *testing.T, lab *labtest.Lab, rel string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(lab.Root, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }

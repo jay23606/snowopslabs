@@ -33,6 +33,22 @@ against your cluster by design, so content loaded from an external root
 (`SNOWOPS_CONTENT_PATH`) is trusted code, only point it at sources you
 trust. See `docs/adr/0008-content-extensibility-seam.md`.
 
+## Secrets in run output
+
+Scripts receive labctl's own environment and the settings each run passes
+them, so run output is masked before it is stored in the run log or streamed
+to the CLI and UI. A value of 8 or more characters under a key ending in
+`_PASSWORD`, `_PASSWD`, `_PASS`, `_TOKEN`, `_KEY`, `_SECRET`, `_CREDENTIALS`,
+`_DSN`, `_WEBHOOK` or `_WEBHOOK_URL`, or containing `WEBHOOK`, is replaced with
+`[redacted:NAME]`. A multi-line value, such as a PEM key, is also masked line
+by line. Redaction is exact-match on text: it does not cover values under 8
+characters, a secret split by the 64 KiB cut on a line with no newline, other
+key names, secrets a script reads from the cluster or a file, or encoded forms
+such as base64. The web UI's action events (command and error text) are masked
+the same way. Treat the run log as readable by anyone
+with access to the UI. See
+[the run engine](docs/architecture/ARCHITECTURE.md#34-durable-replayable-logs).
+
 ## Supported versions
 
 Until the first stable release, only the latest `main` is supported. A formal

@@ -199,6 +199,32 @@ strictly monotonic per run. Consumers stream **from a cursor**:
 - Logs are readable after the run finishes, after a restart, forever (subject to
   retention).
 
+**Redaction.** Scripts see labctl's own environment plus the settings the run
+passes them, so output is masked before it is stored or streamed. The log sink (`internal/run`) passes each complete line
+through a redactor (`internal/redact`) ahead of buffering, step-marker parsing
+and the store write, and the failure message a run records gets the same
+treatment. The web UI executor (`internal/executor`) runs its broadcast lines,
+the command and error fields of its action events, and the stderr in errors
+from `CaptureOutput` through the same rules.
+
+- A value is masked when its key ends in `_PASSWORD`, `_PASSWD`, `_PASS`,
+  `_TOKEN`, `_KEY`, `_SECRET`, `_CREDENTIALS`, `_DSN`, `_WEBHOOK` or
+  `_WEBHOOK_URL`, or contains `WEBHOOK` (any case), and it is 8 or more
+  characters. Each occurrence becomes `[redacted:NAME]`. When one secret
+  contains another, the longer is masked. A value with newlines also registers
+  each of its lines that is 8 or more characters, because output is masked per
+  line.
+- Each run registers the secrets in its `Spec.Env` and in labctl's own
+  environment (which every script inherits) before it starts, so the mask
+  covers what the script can see. `run.WithRedactor` and
+  `Redactor.Register` add values that are not in the env, such as a connected
+  token.
+- Not redacted: values under 8 characters, secrets under other key names,
+  secrets a script reads from somewhere other than its env (a Kubernetes
+  Secret, a file), encoded or transformed forms (base64, URL-encoded), and a
+  secret split by the 64 KiB cut on a line with no newline.
+  Output is masked as text, not scanned for credentials.
+
 ### 3.5 Steps
 
 Long scripts emit step markers (`##snowops:step:<name>`) that the engine
