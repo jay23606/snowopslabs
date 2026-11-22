@@ -363,3 +363,22 @@ func TestPaths_ReportsWhyAPathWasLeftOut(t *testing.T) {
 		t.Errorf("slow was not reported: %v", errs)
 	}
 }
+
+// A module check's target is read from path.yaml, so the catalog can reject
+// one the path cannot reach; an absent target stays empty and means k8s.
+func TestLoadPath_CheckTarget(t *testing.T) {
+	e, learnDir := makeEngine(t)
+	withTarget := strings.Replace(validPathYAML, "      timeoutSeconds: 30\n", "      timeoutSeconds: 30\n      target: k8s\n", 1)
+	writePathYAML(t, learnDir, "test-path", withTarget)
+
+	p, err := e.LoadPath("test-path")
+	if err != nil {
+		t.Fatalf("LoadPath: %v", err)
+	}
+	if got := p.Modules[0].Check.Target; got != "k8s" {
+		t.Errorf("first check target = %q, want k8s", got)
+	}
+	if got := p.Modules[1].Check.Target; got != "" {
+		t.Errorf("second check target = %q, want empty (defaults to k8s)", got)
+	}
+}
