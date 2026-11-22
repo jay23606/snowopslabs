@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/snowops-oss/snowopslabs/internal/redact"
 	"github.com/snowops-oss/snowopslabs/internal/store"
 	"github.com/snowops-oss/snowopslabs/internal/toolchain"
 )
@@ -106,7 +107,10 @@ func (e *Engine) execute(id string) {
 		<-watched
 	}()
 
-	sink := newLogSink(ctx, e.store, e.subs, id, e.now)
+	// Scripts inherit labctl's environment as well as spec.Env.
+	e.redactor.RegisterEnv(redact.ProcessEnv())
+	e.redactor.RegisterEnv(spec.Env)
+	sink := newLogSink(ctx, e.store, e.subs, id, e.now, e.redactor)
 
 	var (
 		res    toolchain.Result
@@ -151,6 +155,8 @@ func (e *Engine) execute(id string) {
 	sink.flush()
 
 	status, exitCode, message := classify(runCtx, timeoutCtx, timeout, res, runErr)
+	// The failure message can quote the script's stderr.
+	message = e.redactor.Redact(message)
 	if message != "" {
 		sink.system(message)
 		sink.flush()

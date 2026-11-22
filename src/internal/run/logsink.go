@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/snowops-oss/snowopslabs/internal/redact"
 	"github.com/snowops-oss/snowopslabs/internal/store"
 )
 
@@ -39,6 +40,9 @@ type logSink struct {
 	subs  *subscribers
 	runID string
 	now   func() time.Time
+	// redactor masks secret values in every line before it is buffered, so
+	// neither the store nor a watcher ever sees one.
+	redactor *redact.Redactor
 
 	mu      sync.Mutex
 	pending []store.LogLine
@@ -46,8 +50,8 @@ type logSink struct {
 	closed  bool
 }
 
-func newLogSink(ctx context.Context, st *store.Store, subs *subscribers, runID string, now func() time.Time) *logSink {
-	return &logSink{ctx: ctx, store: st, subs: subs, runID: runID, now: now}
+func newLogSink(ctx context.Context, st *store.Store, subs *subscribers, runID string, now func() time.Time, redactor *redact.Redactor) *logSink {
+	return &logSink{ctx: ctx, store: st, subs: subs, runID: runID, now: now, redactor: redactor}
 }
 
 // writer returns an io.Writer that splits input into lines on the given stream.
@@ -62,6 +66,7 @@ func (s *logSink) system(text string) {
 }
 
 func (s *logSink) add(line store.LogLine) {
+	line.Text = s.redactor.Redact(line.Text)
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
