@@ -165,8 +165,6 @@ func serveUI(cmd *cobra.Command, o uiOptions, plan uiPlan) error {
 	if err != nil {
 		return fmt.Errorf("cannot bind %s: %w\nAnother `labctl ui` may already be running - stop it first (e.g. pkill -f 'labctl ui'), or choose another --port", plan.addr, err)
 	}
-	_ = ln.Close()
-	go openBrowser(plan.urls[0])
 
 	uiFS := plan.uiFS
 
@@ -183,11 +181,17 @@ func serveUI(cmd *cobra.Command, o uiOptions, plan uiPlan) error {
 	server := httpapi.NewServer(cfg, scriptExec, reg, scenes, incEng, svcReg, rtm, uiFS, opts...)
 	// Print which UI build is served, so an old one is easy to spot.
 	fmt.Fprintf(out, "Serving %s\n", server.UIInfo())
+	// The port is bound, so the page loads as soon as the browser asks for it.
+	go startBrowser(plan.urls[0])
 	if plan.certFile != "" {
-		return server.ServeTLS(cmd.Context(), plan.addr, plan.certFile, plan.keyFile)
+		return server.ServeTLSListener(cmd.Context(), ln, plan.certFile, plan.keyFile)
 	}
-	return server.Serve(cmd.Context(), plan.addr)
+	return server.ServeListener(cmd.Context(), ln)
 }
+
+// startBrowser opens url in the user's browser. It is a variable so tests can
+// record the call without launching a browser.
+var startBrowser = openBrowser
 
 // uiDistFS returns the dist/ subtree of the embedded UI, or an error naming
 // `make cli-build` if the embed is broken.
