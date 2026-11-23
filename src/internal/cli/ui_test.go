@@ -178,24 +178,35 @@ func loadCert(t *testing.T, certFile, keyFile string) *x509.Certificate {
 // load. The fake opener records whether the port accepts connections at the
 // moment it is asked to open the page.
 func TestUI_OpensBrowserOnlyAfterBind(t *testing.T) {
-	l := newTerminal(t)
-	port := freeTCPPort(t)
-	marker := installFakeBrowser(t, port)
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	go func() {
-		waitForFile(marker, 10*time.Second)
-		cancel()
-	}()
-
-	t.Setenv("LABCTL_AUTH", "")
-	r := l.runCtx(ctx, "ui", "--port", port)
-	got, err := os.ReadFile(marker)
-	if err != nil {
-		t.Fatalf("the browser never opened; exit %d, stdout %q, stderr %q", r.exitCode(), r.stdout, r.stderr)
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"plain HTTP", nil},
+		{"HTTPS", []string{"--tls-self-signed"}},
 	}
-	if strings.TrimSpace(string(got)) != "up" {
-		t.Error("browser opened before the port accepted connections")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := newTerminal(t)
+			port := freeTCPPort(t)
+			marker := installFakeBrowser(t, port)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			go func() {
+				waitForFile(marker, 10*time.Second)
+				cancel()
+			}()
+
+			t.Setenv("LABCTL_AUTH", "")
+			r := l.runCtx(ctx, append([]string{"ui", "--port", port}, tt.args...)...)
+			got, err := os.ReadFile(marker)
+			if err != nil {
+				t.Fatalf("the browser never opened; exit %d, stdout %q, stderr %q", r.exitCode(), r.stdout, r.stderr)
+			}
+			if strings.TrimSpace(string(got)) != "up" {
+				t.Error("browser opened before the port accepted connections")
+			}
+		})
 	}
 }
 
