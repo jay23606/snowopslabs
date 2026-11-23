@@ -207,3 +207,22 @@ func TestServer_ServeTLSReportsWhyItCannotStart(t *testing.T) {
 		})
 	}
 }
+
+func TestServer_ServeTLSListenerClosesOnCertificateError(t *testing.T) {
+	s := newContractLab(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	missing := filepath.Join(t.TempDir(), "absent.pem")
+	if err := s.ServeTLSListener(t.Context(), ln, missing, missing); err == nil {
+		t.Fatal("ServeTLSListener returned no error for a missing certificate")
+	}
+
+	rebound, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatalf("listener port %s remained held after TLS setup failed: %v", addr, err)
+	}
+	_ = rebound.Close()
+}

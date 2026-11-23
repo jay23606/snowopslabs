@@ -232,6 +232,29 @@ func TestUI_BusyPortOpensNoBrowser(t *testing.T) {
 	}
 }
 
+func TestUI_InvalidTLSCertDoesNotOpenBrowserOrHoldPort(t *testing.T) {
+	port := freeTCPPort(t)
+	marker := installFakeBrowser(t, port)
+	l := newTerminal(t)
+	t.Setenv("LABCTL_AUTH", "")
+	missing := filepath.Join(t.TempDir(), "missing.pem")
+	r := l.run("ui", "--port", port, "--tls-cert", missing, "--tls-key", missing)
+	if r.exitCode() != 1 || !strings.Contains(r.stderr, "loading TLS certificate") {
+		t.Fatalf("exit %d, stderr %q; want a TLS certificate error", r.exitCode(), r.stderr)
+	}
+
+	waitForFile(marker, 100*time.Millisecond)
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("a browser opened after TLS certificate loading failed")
+	}
+
+	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", port))
+	if err != nil {
+		t.Fatalf("the UI port is still held after TLS certificate loading failed: %v", err)
+	}
+	_ = ln.Close()
+}
+
 // installFakeBrowser puts a shell script named like every browser opener on
 // PATH. Each script writes "up" to the returned marker file if port accepts
 // connections when it runs, and "down" otherwise.
@@ -242,9 +265,13 @@ func installFakeBrowser(t *testing.T, port string) string {
 	}
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "opened")
-	script := "#!/bin/bash\n" +
-		"if (exec 3<>/dev/tcp/127.0.0.1/" + port + ") 2>/dev/null; then s=up; else s=down; fi\n" +
-		"echo \"$s\" > '" + marker + ".tmp' && mv '" + marker + ".tmp' '" + marker + "'\n"
+	testBinary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SNOWOPS_FAKE_BROWSER_MARKER", marker)
+	t.Setenv("SNOWOPS_FAKE_BROWSER_ADDR", net.JoinHostPort("127.0.0.1", port))
+	script := "#!/bin/sh\nexec " + shellQuote(testBinary) + " -test.run='^TestFakeBrowserProbe$'\n"
 	for _, name := range []string{"wslview", "powershell.exe", "cmd.exe", "xdg-open", "open"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
 			t.Fatal(err)
@@ -252,6 +279,28 @@ func installFakeBrowser(t *testing.T, port string) string {
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return marker
+}
+
+// TestFakeBrowserProbe runs in a subprocess launched by the fake browser
+// command and records whether the server accepts connections.
+func TestFakeBrowserProbe(t *testing.T) {
+	marker := os.Getenv("SNOWOPS_FAKE_BROWSER_MARKER")
+	if marker == "" {
+		return
+	}
+	conn, err := net.DialTimeout("tcp", os.Getenv("SNOWOPS_FAKE_BROWSER_ADDR"), time.Second)
+	state := "down"
+	if err == nil {
+		state = "up"
+		_ = conn.Close()
+	}
+	if err := os.WriteFile(marker, []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
 // waitForFile polls until path exists or d has passed.
