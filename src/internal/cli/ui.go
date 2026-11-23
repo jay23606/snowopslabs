@@ -166,7 +166,7 @@ func serveUI(cmd *cobra.Command, o uiOptions, plan uiPlan) error {
 	if err != nil {
 		return fmt.Errorf("cannot bind %s: %w\nAnother `labctl ui` may already be running - stop it first (e.g. pkill -f 'labctl ui'), or choose another --port", plan.addr, err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	if plan.certFile != "" {
 		if _, err := tls.LoadX509KeyPair(plan.certFile, plan.keyFile); err != nil {
 			return fmt.Errorf("loading TLS certificate: %w", err)

@@ -195,7 +195,7 @@ func (s *Server) ServeListener(ctx context.Context, ln net.Listener) error {
 
 // ServeTLSListener is ServeListener over HTTPS.
 func (s *Server) ServeTLSListener(ctx context.Context, ln net.Listener, certFile, keyFile string) error {
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	h := s.httpServer(ln.Addr().String())
 	return s.serveUntil(ctx, h, func() error { return h.ServeTLS(ln, certFile, keyFile) })
 }
