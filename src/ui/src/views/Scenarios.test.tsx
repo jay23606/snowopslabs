@@ -377,3 +377,63 @@ describe('Scenarios view - verify', () => {
     expect(await screen.findByText('All 2 checks passed - the scenario is in its expected state.')).toBeInTheDocument()
   })
 })
+
+describe('Scenarios view - explore links', () => {
+  beforeEach(() => {
+    server.override('GET', '/apps', 200, [
+      { name: 'go-api', buildStrategy: 'docker', deployStrategy: 'helm', deployed: true, capabilities: ['prometheus-metrics'] },
+    ])
+  })
+
+  const withDashboard: Scenario = {
+    ...gitops,
+    explore: {
+      urls: [
+        { label: 'Grafana - Autoscaling dashboard', url: 'http://grafana.localtest.me/d/autoscaling-under-load' },
+        { label: 'Prometheus', url: 'http://prometheus.localtest.me' },
+      ],
+    },
+  }
+
+  it('does not link a dashboard the scenario has not installed yet', async () => {
+    const user = userEvent.setup()
+    serveScenarios([{ ...withDashboard, active: false }])
+
+    renderScenarios()
+    await user.click(await screen.findByRole('button', { name: /details/i }))
+    await user.click(await screen.findByRole('tab', { name: /explore/i }))
+
+    expect(screen.queryByRole('link', { name: 'Grafana - Autoscaling dashboard' })).not.toBeInTheDocument()
+    expect(screen.getByText(/available after you activate this scenario/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Prometheus' })).toHaveAttribute('href', 'http://prometheus.localtest.me')
+  })
+
+  it('links a non-Grafana URL with a /d/ path even while inactive', async () => {
+    const user = userEvent.setup()
+    serveScenarios([{
+      ...gitops,
+      active: false,
+      explore: { urls: [{ label: 'Docs page', url: 'http://docs.localtest.me/d/guide' }] },
+    }])
+
+    renderScenarios()
+    await user.click(await screen.findByRole('button', { name: /details/i }))
+    await user.click(await screen.findByRole('tab', { name: /explore/i }))
+
+    expect(screen.getByRole('link', { name: 'Docs page' })).toHaveAttribute('href', 'http://docs.localtest.me/d/guide')
+  })
+
+  it('links the dashboard once the scenario is active', async () => {
+    const user = userEvent.setup()
+    serveScenarios([{ ...withDashboard, active: true }])
+
+    renderScenarios()
+    await user.click(await screen.findByRole('button', { name: /details/i }))
+    await user.click(await screen.findByRole('tab', { name: /explore/i }))
+
+    expect(screen.getByRole('link', { name: 'Grafana - Autoscaling dashboard' })).toHaveAttribute(
+      'href', 'http://grafana.localtest.me/d/autoscaling-under-load',
+    )
+    expect(screen.queryByText(/available after you activate this scenario/i)).not.toBeInTheDocument()
+  })
+})

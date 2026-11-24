@@ -367,6 +367,9 @@ export function Scenarios({ notify, requestConfirm }: ScenariosProps) {
   )
 }
 
+/** Grafana dashboard URL, e.g. http://grafana.<suffix>/d/<uid>. */
+const GRAFANA_DASHBOARD_URL = /^https?:\/\/grafana\.[^/]+\/d\/[^/?#]+/
+
 /** The scenario detail body, grouped into tabs. A rich scenario carries ten
  *  sections at once - flat, that is a long scroll with the action footer far
  *  from the content it acts on. Four tabs match how the sections are used: read
@@ -504,12 +507,21 @@ function ScenarioDetailTabs({ detail, verifyResult, onCopy, notify }: {
             <div className="modal-section">
               <h3>Explore URLs</h3>
               <div className="stack-2">
-                {urls.map(u => (
-                  <div key={u.label} className="row-flex">
-                    <a href={u.url} target="_blank" rel="noopener noreferrer">{u.label}</a>
-                    <span className="hint-text">{u.url}</span>
-                  </div>
-                ))}
+                {urls.map(u => {
+                  // Grafana dashboards are installed on activation, so an inactive
+                  // scenario's dashboard link would open Grafana's "Not found" page.
+                  const pending = !detail.active && GRAFANA_DASHBOARD_URL.test(u.url)
+                  return (
+                    <div key={u.label} className="row-flex">
+                      {pending
+                        ? <span aria-disabled="true" className="hint-text">{u.label}</span>
+                        : <a href={u.url} target="_blank" rel="noopener noreferrer">{u.label}</a>}
+                      <span className="hint-text">
+                        {pending ? 'Available after you activate this scenario' : u.url}
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
