@@ -49,6 +49,11 @@ explore:
     - "Generate traffic first, or the dashboards stay empty"
 ```
 
+`explore.urls` entries that point at a Grafana dashboard (`http://grafana.<suffix>/d/<uid>`)
+show as "Available after you activate this scenario" in the Explore tab until the
+scenario is active, because the dashboard is installed on activation. Other URLs
+are always linked.
+
 ## Track, level and minutes
 
 Three optional fields let a learner browse the catalog by area, difficulty and
