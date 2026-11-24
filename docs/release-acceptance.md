@@ -19,7 +19,12 @@ filed as a [GitHub issue](https://github.com/snowops-oss/snowopslabs/issues).
 
 - A live lab on this machine (`kubectl config current-context` names it). The
   journey never creates, resets or tears down a lab; it converges the one you
-  have with `labctl init`, as a learner does after an upgrade.
+  have with `labctl init`, as a learner does after an upgrade. A lab that
+  `labctl init` has just built is enough: `leaks` counts only namespaces
+  created after `init`.
+- An app deployed for `apps` and `incident` to test anything
+  (`labctl app build go-api && labctl app deploy go-api` for the default
+  `RA_INCIDENT`). Without one, both steps skip and say so.
 - No incident active (`labctl incident status`); the incident step skips
   otherwise.
 - Room to spare if you cycle a scenario (`RA_SCENARIO`); see
@@ -50,11 +55,11 @@ after one fails, and the run exits non-zero if any failed.
 | `datasources` | Every Grafana datasource passes its health check. |
 | `dashboards` | Grafana holds dashboards, Prometheus has targets up, and the `namespace` label that fills the Namespace picker has values. |
 | `ui` | A throwaway `labctl ui` serves the SPA and `/api/v2` answers JSON for scenarios, incidents, challenges, runs, apps and status. |
-| `apps` | Every deployed app has all replicas ready. |
-| `scenarios` | `labctl scenario verify` grades every active scenario (a pending objective is fine; a crash is not). With `RA_SCENARIO`, that scenario is cycled up → verify → down. |
-| `incident` | `RA_INCIDENT` (default `crashloop-bad-config`) is injected, its detection check fires, `labctl incident resolve` clears it, and every app is ready again. The resolve always runs. |
+| `apps` | Every deployed app has all replicas ready. Skips when no app is deployed. |
+| `scenarios` | `labctl scenario verify` grades every active scenario (a pending objective is fine; a crash is not). With `RA_SCENARIO`, that scenario is cycled `up --deploy-prereqs` → verify → down, and the apps and platform components the cycle added are removed again. |
+| `incident` | `RA_INCIDENT` (default `crashloop-bad-config`) is injected, its detection check fires, `labctl incident resolve` clears it, and every app is ready again. The resolve always runs. Skips, injecting nothing, when the fault needs an app or platform component the lab lacks. |
 | `learning` | `labctl learn list`, `challenge list` and `challenge info` answer. |
-| `leaks` | No namespace exists that did not exist before the run. |
+| `leaks` | No namespace exists that did not exist before the run, or after `init` when the run includes it. |
 
 A failing step is a finding, not a flaky test: open its log, reproduce it with
 `--only <step>`, and fix the cause.
