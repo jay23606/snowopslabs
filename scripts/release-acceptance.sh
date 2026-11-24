@@ -197,18 +197,34 @@ step_ui() {
 }
 
 step_apps() {
-  local out rc=0 name replicas ready
+  local out lines rc=0 name replicas ready
   out="$("$LABCTL" status 2>&1)" || return 1
   # Lines look like: "  go-api   replicas=1 ready=1".
+  lines="$(printf '%s\n' "$out" | grep 'replicas=[0-9]* ready=')"
+  if [ -z "$lines" ]; then
+    log "no app is deployed (labctl app build <app> && labctl app deploy <app>)"
+    return "$SKIP"
+  fi
   while read -r name replicas ready; do
     replicas="${replicas#replicas=}"
     ready="${ready#ready=}"
     log "$name: $ready/$replicas ready"
     [ "$replicas" = "$ready" ] || rc=1
   done <<EOF
-$(printf '%s\n' "$out" | grep 'replicas=[0-9]* ready=')
+$lines
 EOF
   return "$rc"
+}
+
+# deployed_apps prints the apps `labctl status` lists as deployed.
+deployed_apps() {
+  "$LABCTL" status 2>/dev/null | awk '/replicas=[0-9]* ready=/ {print $1}' | sort
+}
+
+# installed_components prints the platform components `labctl platform
+# status` lists as installed ("not installed" rows have "not" in column 2).
+installed_components() {
+  "$LABCTL" platform status 2>/dev/null | awk 'NR > 1 && $2 == "installed" {print $1}' | sort
 }
 
 # verify_runs <scenario> passes when verify grades the scenario, whether or not
@@ -234,15 +250,32 @@ step_scenarios() {
   if [ -n "$RA_SCENARIO" ]; then
     case " $active " in
       *" $RA_SCENARIO "*) log "$RA_SCENARIO is already active; not cycling it" ;;
-      *)
-        log "--- cycle $RA_SCENARIO"
-        "$LABCTL" scenario up "$RA_SCENARIO" || rc=1
-        verify_runs "$RA_SCENARIO" || rc=1
-        "$LABCTL" scenario down "$RA_SCENARIO" || rc=1
-        ;;
+      *) cycle_scenario "$RA_SCENARIO" || rc=1 ;;
     esac
   fi
   [ -n "$active$RA_SCENARIO" ] || return "$SKIP"
+  return "$rc"
+}
+
+# cycle_scenario <name> runs up -> verify -> down with --deploy-prereqs, then
+# removes the apps and platform components the cycle added, so the lab is left
+# as it was found.
+cycle_scenario() {
+  local rc=0 apps_before components_before name
+  apps_before="$(deployed_apps)"
+  components_before="$(installed_components)"
+  log "--- cycle $1"
+  "$LABCTL" scenario up "$1" --deploy-prereqs || rc=1
+  verify_runs "$1" || rc=1
+  "$LABCTL" scenario down "$1" || rc=1
+  for name in $(deployed_apps | comm -13 <(printf '%s\n' "$apps_before") -); do
+    log "--- remove app $name, deployed for $1"
+    "$LABCTL" app destroy "$name" || rc=1
+  done
+  for name in $(installed_components | comm -13 <(printf '%s\n' "$components_before") -); do
+    log "--- remove $name, installed for $1"
+    "$LABCTL" platform down "$name" || rc=1
+  done
   return "$rc"
 }
 
@@ -254,15 +287,31 @@ incident_cleared() {
   "$LABCTL" incident status 2>&1 | grep -q "No incident is active"
 }
 
-apps_ready() { step_apps >/dev/null; }
+# apps_ready passes when every deployed app is ready, or none is deployed.
+apps_ready() {
+  local rc=0
+  step_apps >/dev/null || rc=$?
+  [ "$rc" -ne 1 ]
+}
 
 step_incident() {
-  local rc=0
+  local rc=0 out
   if ! incident_cleared; then
     log "An incident is already active; not injecting another."
     return "$SKIP"
   fi
-  "$LABCTL" incident inject "$RA_INCIDENT" || return 1
+  out="$("$LABCTL" incident inject "$RA_INCIDENT" 2>&1)" || {
+    log "$out"
+    case "$out" in
+      *"required app(s) not deployed"* | *"platform prerequisite(s) not installed"*)
+        log "Skipped: nothing was injected, because $RA_INCIDENT needs something the lab lacks."
+        log "Deploy what the message above names, then rerun with --only incident."
+        return "$SKIP"
+        ;;
+    esac
+    return 1
+  }
+  log "$out"
   if wait_until "$RA_WAIT" incident_detected; then
     log "detection check fires"
   else
@@ -289,6 +338,11 @@ step_learning() {
 }
 
 namespaces() { kubectl get ns -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | sort; }
+
+# take_baseline records the namespaces that exist now, for leaks.
+take_baseline() {
+  namespaces >"$OUT/namespaces.before" 2>/dev/null || rm -f "$OUT/namespaces.before"
+}
 
 step_leaks() {
   local extra
@@ -365,10 +419,13 @@ main() {
   mkdir -p "$OUT"
   : >"$OUT/results.tsv"
   trap stop_ui EXIT
-  namespaces >"$OUT/namespaces.before" 2>/dev/null || rm -f "$OUT/namespaces.before"
+  take_baseline
   log "Release acceptance -> $OUT"
   for step in $steps; do
     run_step "$step"
+    # init converges the lab (it creates monitoring, traefik and the rest on a
+    # fresh one), so leaks counts only what the steps after it leave behind.
+    [ "$step" = init ] && take_baseline
   done
   write_report
   log "Report: $OUT/report.md"
