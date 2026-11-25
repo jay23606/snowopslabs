@@ -253,7 +253,7 @@
           "format": "time_series"
         }
       ],
-      "description": "Quantiles are estimated from histogram buckets, and the first bucket ends at 5ms. Below that Grafana can only interpolate, so a fast app reads p50 2.5ms, p95 4.75ms and p99 4.95ms: treat those values as \"under 5ms\"."
+      "description": "Quantiles are estimated from histogram buckets. The sample apps' first bucket ends at 0.1ms, then 0.25ms, 0.5ms, 1ms, 2.5ms and 5ms; inside a bucket Grafana can only interpolate, so read a value as \"somewhere in that bucket\". An app whose first bucket is 5ms reads p50 2.5ms and p99 4.95ms however fast it is."
     },
     {
       "id": 5,

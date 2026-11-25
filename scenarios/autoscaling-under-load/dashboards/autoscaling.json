@@ -170,7 +170,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum(rate({{.WorkloadMetric}}_bucket{app=\"$app\"}[5m])) by (le)) / clamp_min(histogram_quantile(0.50, sum(rate({{.WorkloadMetric}}_bucket{app=\"$app\"}[5m])) by (le)), 0.001)",
+          "expr": "histogram_quantile(0.99, sum(rate({{.WorkloadMetric}}_bucket{app=\"$app\"}[5m])) by (le)) / clamp_min(histogram_quantile(0.50, sum(rate({{.WorkloadMetric}}_bucket{app=\"$app\"}[5m])) by (le)), 0.00001)",
           "legendFormat": "p99/p50",
           "refId": "A"
         }

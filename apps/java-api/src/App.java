@@ -18,6 +18,7 @@ import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -146,9 +147,14 @@ public final class App {
      * be derived from the same series.
      */
     static final class Metrics {
-        /** The semconv-recommended bucket boundaries, in seconds. */
+        /**
+         * The semconv bucket boundaries, in seconds, with 0.1ms, 0.25ms, 0.5ms,
+         * 1ms and 2.5ms ahead of them: a request here takes well under a
+         * millisecond, and with 5ms as the first bucket no quantile below 5ms
+         * can be read.
+         */
         private static final double[] BUCKETS =
-                {.005, .01, .025, .05, .075, .1, .25, .5, .75, 1, 2.5, 5, 7.5, 10};
+                {.0001, .00025, .0005, .001, .0025, .005, .01, .025, .05, .075, .1, .25, .5, .75, 1, 2.5, 5, 7.5, 10};
 
         private final Map<String, Series> series = new ConcurrentHashMap<>();
 
@@ -217,8 +223,10 @@ public final class App {
             }
         }
 
+        // Plain decimal, as Go's client writes it: Double.toString would give
+        // le="5.0E-4" for the first bucket.
         private static String trim(double d) {
-            return d == Math.rint(d) ? String.valueOf((long) d) : String.valueOf(d);
+            return BigDecimal.valueOf(d).stripTrailingZeros().toPlainString();
         }
 
         private static String esc(String s) {

@@ -41,7 +41,7 @@ var (
 	httpRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "http_server_request_duration_seconds",
 		Help:    "Duration of HTTP server requests in seconds.",
-		Buckets: []float64{.005, .01, .025, .05, .075, .1, .25, .5, .75, 1, 2.5, 5, 7.5, 10},
+		Buckets: []float64{.0001, .00025, .0005, .001, .0025, .005, .01, .025, .05, .075, .1, .25, .5, .75, 1, 2.5, 5, 7.5, 10},
 	}, []string{"http_request_method", "http_route", "http_response_status_code", "app"})
 )
 
