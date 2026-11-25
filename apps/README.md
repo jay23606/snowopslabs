@@ -115,6 +115,14 @@ already-instrumented app arrives close to conformant.
 > labels, so an error rate derives from the same series:
 > `rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m])`.
 
+The histogram needs a first bucket below the app's typical latency.
+`histogram_quantile` can only interpolate inside a bucket, so when every
+request lands in the first one, p50 reads half of it and p99 reads 0.99 of it
+however fast the app is, and a p99 / p50 check such as autoscaling-under-load's
+is stuck at 1.98 and cannot fail. The sample apps serve a request in 20 to
+100µs, so they put 0.1ms, 0.25ms, 0.5ms, 1ms and 2.5ms ahead of the semconv
+boundaries (`0.0001, 0.00025, 0.0005, 0.001, 0.0025`, then `0.005` up to `10`).
+
 ### Capabilities
 
 Run `labctl app capabilities` for the current list.

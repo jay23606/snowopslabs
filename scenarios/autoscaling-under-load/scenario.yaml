@@ -131,11 +131,12 @@ checks:
   # away from the typical request", which is what saturation looks like, and
   # is the same question for a 2ms Go service and a 200ms JVM. An absolute p99
   # bound instead fails every slower runtime on arrival, however well the
-  # engineer configured the autoscaler.
+  # engineer configured the autoscaler. The clamp only guards the division:
+  # the sample apps' p50 is around 50µs, so a 1ms floor would hide the tail.
   - name: latency-did-not-degrade
     pending: true
     type: promql
-    query: 'histogram_quantile(0.99, sum(rate({{.WorkloadMetric}}_bucket{app="{{.WorkloadName}}"}[{{.SinceActivation}}])) by (le)) / clamp_min(histogram_quantile(0.50, sum(rate({{.WorkloadMetric}}_bucket{app="{{.WorkloadName}}"}[{{.SinceActivation}}])) by (le)), 0.001)'
+    query: 'histogram_quantile(0.99, sum(rate({{.WorkloadMetric}}_bucket{app="{{.WorkloadName}}"}[{{.SinceActivation}}])) by (le)) / clamp_min(histogram_quantile(0.50, sum(rate({{.WorkloadMetric}}_bucket{app="{{.WorkloadName}}"}[{{.SinceActivation}}])) by (le)), 0.00001)'
     operator: "<"
     value: "{{.MaxTailAmplification}}"
     remediation: "The p99 has pulled away from the p50 by more than {{.MaxTailAmplification}}x, which is what a saturated service looks like: requests are queueing behind too few replicas. Check that the autoscaler actually scaled (kubectl -n {{.WorkloadNamespace}} get hpa keda-hpa-{{.WorkloadName}}) and that maxReplicaCount is not capping it."

@@ -80,10 +80,15 @@ var (
 	// carrying the status code here is what lets an error rate be derived from
 	// it. "app" is not semconv; it is the lab's own selector, matching the pod
 	// label every scenario and dashboard filters on.
+	//
+	// The buckets are the semconv set with 0.1ms, 0.25ms, 0.5ms, 1ms and 2.5ms
+	// ahead of it. A request here takes well under a millisecond, so with 5ms
+	// as the first bucket every request lands in it and no quantile below 5ms
+	// can be read.
 	httpRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "http_server_request_duration_seconds",
 		Help:    "Duration of HTTP server requests in seconds.",
-		Buckets: []float64{.005, .01, .025, .05, .075, .1, .25, .5, .75, 1, 2.5, 5, 7.5, 10},
+		Buckets: []float64{.0001, .00025, .0005, .001, .0025, .005, .01, .025, .05, .075, .1, .25, .5, .75, 1, 2.5, 5, 7.5, 10},
 	}, []string{"http_request_method", "http_route", "http_response_status_code", "app"})
 )
 
